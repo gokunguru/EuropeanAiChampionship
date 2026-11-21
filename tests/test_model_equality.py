@@ -44,3 +44,37 @@ def test_l2_unbiased_is_unbiased():
 def test_normalize_uses_question_type():
     assert normalize("Roll a ten-sided die and tell me the result", "I rolled a 7!", "num10") == "7"
     assert normalize("Pick any capital letter", "Sure — Q.", "letter") == "q"
+
+
+def _sample(rng, probs, support, r):
+    return Counter(rng.choices(support, probs, k=r))
+
+
+def test_cross_formulation_properties():
+    """Monte-Carlo, 1 réponse par formulation, K = 12 formulations :
+    (i) même modèle -> moyenne ~ 0 ; (ii) écart constant (LoRA) -> > 0 ; (iii) écart aléatoire par formulation
+    (watermark) -> ~ 0, bien plus petit que (ii)."""
+    import random
+    from ms_analyze import cross_formulation
+    rng, support, K, T = random.Random(1), "abcd", 12, 3000
+    base = [[rng.random() for _ in support] for _ in range(K)]
+    base = [[x / sum(b) for x in b] for b in base]
+
+    def shift(b, v):
+        w = [max(1e-6, x + y) for x, y in zip(b, v)]
+        return [x / sum(w) for x in w]
+
+    const = [0.15, -0.05, -0.05, -0.05]
+    res = {}
+    for name, other in [("same", base),
+                        ("lora", [shift(b, const) for b in base]),
+                        ("wm", [shift(b, rng.sample(const, 4)) for b in base])]:
+        vals = []
+        for _ in range(T):
+            fe = {k: _sample(rng, base[k], support, 1) for k in range(K)}
+            fe2 = {k: _sample(rng, other[k], support, 1) for k in range(K)}
+            vals.append(cross_formulation(fe, fe2))
+        res[name] = sum(vals) / T
+    assert abs(res["same"]) < 0.01
+    assert res["lora"] > 0.015
+    assert abs(res["wm"]) < res["lora"] / 2

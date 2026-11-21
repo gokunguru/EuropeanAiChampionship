@@ -37,6 +37,40 @@ def normalize(prompt: str, response: str, qtype: str = "") -> str:
     return words[-1] if words else "<none>"
 
 
+def load_by_formulation(path: str) -> dict:
+    """form[e][t][k] = Counter des réponses normalisées de e à la formulation k de la question de type t (v2)."""
+    form = defaultdict(lambda: defaultdict(lambda: defaultdict(Counter)))
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                r = json.loads(line)
+                if "_" in r["id"]:
+                    t, k = r["id"].split("_", 1)
+                    form[r["endpoint"]][t][k][normalize(r["prompt"], r["response"], t)] += 1
+    return form
+
+
+def cross_formulation(fe: dict, fe2: dict) -> float:
+    """Estimateur D_x(e, e') = 1/(K(K-1)) * sum_{k != l} <delta_k, delta_l>, delta_k = p_hat_{e,k} - p_hat_{e',k}.
+
+    Proposition : si e et e' ont la même loi de réponse pour chaque formulation k, E[D_x] = 0 (même avec 1 réponse par
+    formulation). Preuve : pour k != l, delta_k et delta_l sont indépendants (requêtes distinctes) et d'espérance nulle,
+    donc E<delta_k, delta_l> = <E delta_k, E delta_l> = 0.
+    Calcul en O(K) : sum_{k != l} <d_k, d_l> = ||sum_k d_k||^2 - sum_k ||d_k||^2."""
+    ks = sorted(set(fe) & set(fe2))
+    if len(ks) < 2:
+        return 0.0
+    total, diag = Counter(), 0.0
+    for k in ks:
+        n, m = sum(fe[k].values()), sum(fe2[k].values())
+        dk = Counter()
+        for a in set(fe[k]) | set(fe2[k]):
+            dk[a] = fe[k][a] / n - fe2[k][a] / m
+        diag += sum(v * v for v in dk.values())
+        total.update(dk)
+    return (sum(v * v for v in total.values()) - diag) / (len(ks) * (len(ks) - 1))
+
+
 def load(path: str) -> dict:
     """dist[e][q] = Counter des réponses normalisées. En v2 (id "<type>_<k>"), q = <type> : les formulations d'une
     même question sont regroupées."""
@@ -109,12 +143,21 @@ def main() -> None:
     answers, truth_path = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None
     dist = load(answers)
     endpoints = sorted(dist)
-    d = {frozenset((a, b)): distance(dist, a, b) for a, b in combinations(endpoints, 2)}
+    form = load_by_formulation(answers)
+    if form:   # v2 : estimateur croisé entre formulations (robuste au watermark), moyenné sur les types de question
+        def dx(a, b):
+            ts = set(form[a]) & set(form[b])
+            return sum(cross_formulation(form[a][t], form[b][t]) for t in ts) / len(ts)
+        d = {frozenset((a, b)): dx(a, b) for a, b in combinations(endpoints, 2)}
+        print("Estimateur : croisé entre formulations (v2)")
+    else:      # v1 : une seule formulation par question
+        d = {frozenset((a, b)): distance(dist, a, b) for a, b in combinations(endpoints, 2)}
+        print("Estimateur : L2 sans biais (v1)")
 
-    print("Distances d(e, e') :")
+    print("Distances d(e, e') x 1000 :")
     print("       " + " ".join(f"{e[-5:]:>6}" for e in endpoints))
     for a in endpoints:
-        print(f"{a[-6:]:>6} " + " ".join("   -  " if a == b else f"{d[frozenset((a, b))]:6.3f}" for b in endpoints))
+        print(f"{a[-6:]:>6} " + " ".join("   -  " if a == b else f"{1000 * d[frozenset((a, b))]:6.1f}" for b in endpoints))
 
     if truth_path:
         with open(truth_path, newline="") as f:
