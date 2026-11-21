@@ -107,8 +107,14 @@ def probe(name: str, endpoints: list) -> None:
                     time.sleep(2)
                     continue
                 break
-            status = "accepté" if r.status_code == 200 else "refusé"
-            detail = r.json().get("budget") if r.status_code == 200 else r.text[:80]
+            # 200 = accepté (1 requête décomptée) ; 400 « not counted » = refusé (gratuit) ;
+            # autre (502 après 15 s, etc.) = perdu : décompté peut-être, mais on ne conclut rien et on ne réessaie pas.
+            if r.status_code == 200:
+                status, detail = "accepté", r.json().get("budget")
+            elif r.status_code == 400 and "not counted" in r.text:
+                status, detail = "refusé", r.text[:60]
+            else:
+                status, detail = "perdu", r.text[:60]
             out.write(json.dumps({"endpoint": ep, "status": status, "http": r.status_code, "detail": detail}) + "\n")
             print(f"{ep}: {status} (HTTP {r.status_code}) {detail}")
 
