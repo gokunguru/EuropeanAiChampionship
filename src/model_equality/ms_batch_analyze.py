@@ -91,3 +91,94 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Choix du nombre de groupes par silhouette et stabilité par bootstrap (outils repris des scripts d'Erwan).
+def per_question_terms(U: dict, eps: list) -> dict:
+    """T[q] = (X, W) : X[i][j] désaccord croisé, W[i] désaccord interne, pour chaque question q (NaN si absent)."""
+    import numpy as np
+    T = {}
+    batches = sorted({b for e in eps for b in U[e]})
+    for b in batches:
+        qs = sorted({q for e in eps for u in U[e].get(b, []) for q in u})
+        for q in qs:
+            ans = [[u[q] for u in U[e].get(b, []) if u.get(q) not in BAD] for e in eps]
+            n = len(eps)
+            X = np.full((n, n), np.nan)
+            W = np.full(n, np.nan)
+            for i in range(n):
+                a = ans[i]
+                if len(a) >= 2:
+                    W[i] = sum(a[s] != a[t] for s in range(len(a)) for t in range(len(a)) if s != t) / (len(a) * (len(a) - 1))
+                for j in range(i + 1, n):
+                    c = ans[j]
+                    if a and c:
+                        X[i, j] = X[j, i] = sum(x != y for x in a for y in c) / (len(a) * len(c))
+            T[q] = (X, W)
+    return T
+
+
+def distance_from_terms(T: dict, keys: list):
+    """d = moyenne sur q de X - (W_i + W_j)/2 ; si W manque, on utilise la moyenne des W connus de l'endpoint."""
+    import numpy as np
+    Xs = np.stack([T[q][0] for q in keys])
+    Ws = np.stack([T[q][1] for q in keys])
+    Wbar = np.nanmean(Ws, axis=0)
+    Wbar = np.where(np.isnan(Wbar), np.nanmean(Wbar), Wbar)
+    Wf = np.where(np.isnan(Ws), Wbar[None, :], Ws)
+    D = Xs - 0.5 * (Wf[:, :, None] + Wf[:, None, :])
+    d = np.nanmean(D, axis=0)
+    d = np.clip(np.nan_to_num(d, nan=np.nanmax(d)), 0, None)
+    np.fill_diagonal(d, 0)
+    return (d + d.T) / 2
+
+
+def choose_k(d, kmax: int = 6):
+    """Classification hiérarchique (liaison moyenne) ; k choisi par le score de silhouette."""
+    from scipy.cluster.hierarchy import fcluster, linkage
+    from scipy.spatial.distance import squareform
+    from sklearn.metrics import silhouette_score
+    Z = linkage(squareform(d, checks=False), method="average")
+    res = []
+    for k in range(2, kmax + 1):
+        lab = fcluster(Z, k, criterion="maxclust")
+        if 1 < len(set(lab)) < len(lab):
+            res.append((silhouette_score(d, lab, metric="precomputed"), k, lab))
+    return Z, res
+
+
+def family_report(U: dict, group: list, name: str, B: int = 200) -> None:
+    import numpy as np
+    from scipy.cluster.hierarchy import fcluster
+    T = per_question_terms(U, group)
+    keys = list(T)
+    d = distance_from_terms(T, keys)
+    Z, res = choose_k(d)
+    print(f"\n##### {name} ({len(group)} endpoints, {len(keys)} questions) — silhouette par nombre de groupes k :")
+    print("  " + "  ".join(f"k={k}: {s:.2f}" for s, k, _ in res))
+    s, k, lab = max(res, key=lambda r: r[0])
+    groups = {}
+    for e, l in zip(group, lab):
+        groups.setdefault(l, []).append(e)
+    print(f"  meilleur k = {k} (silhouette {s:.2f}) : " + " | ".join(",".join(v) for v in groups.values()))
+    rng = np.random.default_rng(0)
+    co = np.zeros((len(group), len(group)))
+    for _ in range(B):
+        sample = [keys[i] for i in rng.integers(0, len(keys), len(keys))]
+        lb = fcluster(Z if False else __import__("scipy.cluster.hierarchy", fromlist=["linkage"]).linkage(
+            __import__("scipy.spatial.distance", fromlist=["squareform"]).squareform(
+                distance_from_terms(T, sample), checks=False), "average"), k, criterion="maxclust")
+        co += lb[:, None] == lb[None, :]
+    co /= B
+    amb = [(group[i], group[j], co[i, j]) for i in range(len(group)) for j in range(i + 1, len(group)) if 0.2 < co[i, j] < 0.8]
+    print(f"  bootstrap ({B} tirages de questions) : {len(amb)} paires ambiguës (ensemble entre 20 % et 80 % du temps)")
+    for a, b, c in sorted(amb, key=lambda x: -x[2])[:10]:
+        print(f"    {a}-{b} : {c:.2f}")
+
+
+if __name__ == "__main__" and len(sys.argv) > 2 and sys.argv[2] == "familles":
+    U_ = load(sys.argv[1])
+    family_report(U_, QWEN, "QWEN")
+    family_report(U_, LLAMA, "LLAMA")
+    family_report(U_, QWEN + LLAMA, "TOUS (contrôle : doit retrouver Qwen / Llama)")
