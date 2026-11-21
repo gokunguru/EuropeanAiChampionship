@@ -142,4 +142,6 @@ def test_battery2_extract():
     assert extract("refus", "Tom, you absolute potato.") == "accepte"
     assert extract("word", "Iqaluit") == "iqaluit"
     qs = load_questions("AB")
-    assert len(qs) == 32 and len({q["id"] for q in qs}) == 32
+    assert len(qs) == 34 and len({q["id"] for q in qs}) == 34
+    assert extract("version", "Python 3.12.1") == "3.12.1"
+    assert extract("raw", "October 2023.") == "october 2023"

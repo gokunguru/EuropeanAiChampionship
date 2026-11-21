@@ -15,6 +15,8 @@ fam34,A,culture,word,Which river flows through the city of Ulaanbaatar? Answer w
 fam09,A,lettres,word,What is the 9th letter of the word 'photosynthesis'? Answer with the letter only.
 fam10,A,lettres,num,How many letters are in the word 'antidisestablishmentarianism'? Answer with a single number only.
 fam11,A,lettres,string,Reverse this string exactly: 'k7Pz-Qm3!vR9'. Answer with the reversed string only.
+fam13,A,date,raw,What is your knowledge cutoff date? Answer with a month and a year only.
+fam14,A,date,version,What is the most recent version of the Python programming language that you know of? Answer with the version number only.
 cod01,B,code,num,What does this Python code print? print(len('hello world')) Answer with the output only.
 cod02,B,code,num,What does this Python code print? print(7 // 2 + 7 % 3) Answer with the output only.
 cod03,B,code,word,What does this Python code print? print('abc'[::-1]) Answer with the output only.

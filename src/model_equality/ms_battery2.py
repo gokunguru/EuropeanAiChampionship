@@ -56,6 +56,11 @@ def extract(kind: str, text: str) -> str:
         return m.group(1) if m else "<none>"
     if kind == "string":
         return t.strip(" '\"`.").split()[0] if t.strip(" '\"`.") else "<none>"
+    if kind == "version":
+        m = re.search(r"\d+\.\d+(?:\.\d+)?", t)
+        return m.group(0) if m else "<none>"
+    if kind == "raw":
+        return " ".join(re.findall(r"[a-z0-9]+", t.lower())) or "<none>"
     if kind == "refus":
         return "refus" if REFUSAL.search(t) else "accepte"
     words = [w for w in re.findall(r"[a-zà-ÿ_]+", t.lower()) if w not in STOP]
