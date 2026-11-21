@@ -8,8 +8,9 @@ Inconnue : si le serveur compte avec un seul tokenizer commun, tous les endpoint
 Usage (sur JURECA, dans un environnement personnel, pas dans le .venv partagé) :
     python -m venv ~/tokenv && source ~/tokenv/bin/activate && pip install -q transformers sentencepiece protobuf requests
     python ms_tok_boundary.py build                    # gratuit : compte les tokens, choisit S, écrit ms_tok_S.txt
-    python ms_tok_boundary.py probe ref-01 ep-01 ep-09 # test sur 3 endpoints (coût <= 2)
-    python ms_tok_boundary.py probe all                # les 33 endpoints (coût = nb d'endpoints qui acceptent)
+    python ms_tok_boundary.py probe emoji ref-01 ep-01 ep-09   # test sur 3 endpoints (coût <= 2)
+    python ms_tok_boundary.py probe emoji all                  # les 33 endpoints (coût = nb qui acceptent)
+    python ms_tok_boundary.py probe chiffres all               # texte complémentaire (Llama 3 accepte, Qwen refuse)
 """
 import json
 import os
@@ -21,7 +22,10 @@ import requests
 
 SERVER = "http://34.147.229.55/33-model-equality/v1/chat/completions"
 S_FILE = Path("ms_tok_S.txt")
-OUT = Path("ms_tok_probe.jsonl")
+# Textes frontières retenus après « build » (comptes de tokens : voir le cours).
+#   emoji x 170    : qwen2.5 = 850, gemma2 = 850 (acceptés) ; llama3 = 2210, olmo2 = 2210, mistral = 1361 (refusés)
+#   chiffres x 56  : llama3 = 840, olmo2 = 840 (acceptés) ; qwen2.5 = 1848, mistral = 1849, gemma2 = 1848 (refusés)
+PROBE_TEXTS = {"emoji": ("emoji", 170), "chiffres": ("chiffres", 56)}
 
 # Tokenizers candidats (copies publiques quand l'original est en accès restreint).
 CANDIDATES = {
@@ -80,10 +84,13 @@ def build() -> None:
     print(f"Écrit dans {S_FILE}. Accepté attendu si compte <= ~1000, refusé si compte > 1024.")
 
 
-def probe(endpoints: list) -> None:
-    """Envoie S à chaque endpoint (max_tokens = 1) et note accepté / refusé. Les refus ne sont pas décomptés."""
+def probe(name: str, endpoints: list) -> None:
+    """Envoie le texte frontière `name` à chaque endpoint (max_tokens = 1) et note accepté / refusé.
+    Les refus (prompt > 1 024 tokens) ne sont pas décomptés ; un accepté coûte 1 requête."""
     key = os.environ["ME_KEY"]
-    text = S_FILE.read_text(encoding="utf-8")
+    brick, n = PROBE_TEXTS[name]
+    text = BRICKS[brick] * n
+    OUT = Path(f"ms_tok_probe_{name}.jsonl")
     if endpoints == ["all"]:
         endpoints = [f"ep-{i:02d}" for i in range(1, 34)]
     done = set()
@@ -109,4 +116,4 @@ def probe(endpoints: list) -> None:
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in ("build", "probe"):
         raise SystemExit(__doc__)
-    build() if sys.argv[1] == "build" else probe(sys.argv[2:])
+    build() if sys.argv[1] == "build" else probe(sys.argv[2], sys.argv[3:])
