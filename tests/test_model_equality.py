@@ -122,7 +122,7 @@ def test_battery_extract_and_permutation():
     rng = random.Random(3)
     qs = [f"q{i}" for i in range(20)]
     truth = {q: str(rng.randint(0, 9)) for q in qs}
-    other = {q: (truth[q] if i % 3 else "x") for i, q in enumerate(qs)}    # modèle différent sur 1 question / 3
+    other = {q: ("x" if i % 3 else truth[q]) for i, q in enumerate(qs)}    # modèle différent sur 2 questions / 3
 
     def sample(t):   # réponse modale avec proba 0,8, sinon une autre
         return {q: [t[q] if rng.random() < 0.8 else "z" for _ in range(2)] for q in qs}
