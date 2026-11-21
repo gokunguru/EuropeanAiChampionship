@@ -384,6 +384,53 @@ L'affirmation « pour un watermark, $\sum_{k\neq l}\langle\delta_k,\delta_l\rang
 $D_t$ peut être négatif : c'est l'estimation sans biais d'une quantité qui vaut 0 quand les deux endpoints servent le même modèle. Une valeur proche de 0, positive ou négative, signifie « même modèle » ; une valeur nettement positive signifie « modèles différents ».
 \end{retenir}
 
+\section{Une statistique invariante à la température}
+
+\emph{Idée d'Erwan et de Mohamed-Souleyman.} La température est le seul déguisement dont on connaît exactement l'effet mathématique : elle divise les logits par $T$. On peut donc construire une statistique qui y est insensible par construction.
+
+\begin{definition}[Logits]
+Pour une question fixée, le modèle calcule un score réel $z(a)$ pour chaque réponse possible $a$, appelé \emph{logit}. La loi des réponses à la température $T$ est $p_T(a) = e^{z(a)/T} / Z_T$, avec $Z_T = \sum_b e^{z(b)/T}$ : c'est la fonction \emph{softmax} appliquée à $z/T$.
+\end{definition}
+
+\begin{proposition}[Relation affine des log-probabilités]\label{prop:loglin}
+Si deux endpoints servent le même modèle (mêmes logits $z$) aux températures $T_1$ et $T_2$, alors pour toute réponse $a$,
+\[
+\log p_{T_1}(a) = \frac{T_2}{T_1}\,\log p_{T_2}(a) + c, \qquad c = \frac{T_2}{T_1}\log Z_{T_2} - \log Z_{T_1}.
+\]
+\end{proposition}
+\begin{proof}
+On « inverse » le softmax : $\log p_T(a) = z(a)/T - \log Z_T$, donc $z(a) = T\,(\log p_T(a) + \log Z_T)$. En écrivant cette égalité pour $T_2$ et en la reportant dans l'expression de $\log p_{T_1}(a)$, on obtient la relation annoncée ; la constante $c$ ne dépend pas de $a$.
+\end{proof}
+
+\begin{intuition}
+On trace, pour chaque réponse possible, le point $(\log p_{e'}(a), \log p_e(a))$. Si les deux endpoints servent le même modèle, à n'importe quelle température, les points sont alignés sur une droite de pente $T_{e'}/T_e$. Une LoRA ou une quantization modifie les logits eux-mêmes, de façon différente selon la réponse : les points s'écartent de la droite.
+\end{intuition}
+
+\begin{definition}[Résidu log-linéaire]
+À partir des comptages $c_e(a)$, lissés ($c_e(a)+\frac12$ pour éviter $\log 0$), on fait une régression linéaire pondérée de $\log\hat p_e$ sur $\log\hat p_{e'}$, avec pour poids $c_e(a)+c_{e'}(a)$. La statistique est $1-R^2$, où $R^2$ est le coefficient de détermination : 0 si les points sont parfaitement alignés.
+\end{definition}
+
+\begin{proposition}[Conservation de l'ordre]\label{prop:rang}
+L'application $x\mapsto x^{1/T}$ est strictement croissante sur $]0,+\infty[$. Le passage de $p_{T_2}$ à $p_{T_1}$ conserve donc l'ordre des réponses : $p_{T_2}(a) > p_{T_2}(b) \iff p_{T_1}(a) > p_{T_1}(b)$. En particulier, la réponse la plus probable (le mode) est la même à toute température.
+\end{proposition}
+\begin{proof}
+D'après la proposition~\ref{prop:loglin}, $\log p_{T_1}$ est une fonction affine de pente $T_2/T_1>0$ de $\log p_{T_2}$, donc une fonction strictement croissante.
+\end{proof}
+
+D'où une seconde statistique, plus robuste : $1-\rho$, où $\rho$ est la \emph{corrélation de Spearman} (la corrélation entre les rangs) des fréquences des deux endpoints. Elle vaut 0 quand les deux classements coïncident.
+
+\begin{pourquoi}
+Les deux statistiques se complètent. Le test log-linéaire utilise les valeurs des probabilités, il est donc plus puissant ; mais il exige de bien estimer des log-probabilités, donc beaucoup de réponses à une même question. Le test des rangs n'utilise que l'ordre : il perd de l'information, mais il est moins sensible au bruit et à une troncature de la loi (\emph{top-k}, \emph{top-p}), qui conserve elle aussi l'ordre des réponses les plus probables.
+\end{pourquoi}
+
+\begin{exemple}
+Simulation avec dix réponses possibles et 40 échantillons par endpoint, sur la structure des références (cinq endpoints du même modèle dont un à température 1,6, quatre modèles aux logits déformés) : AUC de 0,70 pour le résidu log-linéaire et de 0,55 pour Spearman. Avec 40 échantillons, le bruit d'estimation reste important ; le test sur les vraies références (collecte v5, 2 questions $\times$ 40 répétitions) dira ce qu'il en est.
+\end{exemple}
+
+\begin{limite}
+Ces deux propositions ne couvrent que la température. Un watermark ajoute un terme $\delta(a)$ aux logits (sur les tokens de la liste verte) et un persona change le contexte, donc les logits : la droite n'est plus garantie dans ces deux cas. Avec 100 requêtes par endpoint noté, on ne pourra estimer les log-probabilités que sur deux ou trois questions.
+\end{limite}
+
 \section{Des distances aux groupes}
 
 \begin{definition}[Classification ascendante hiérarchique, liaison moyenne]
@@ -421,6 +468,8 @@ $\varphi$ (un mot, v1/v2) & \code{normalize(prompt, response, qtype)} \\
 comptages par formulation & \code{load\_by\_formulation(path)} \\
 $D_t(e,e')$ & \code{cross\_formulation(fe, fe2)} \\
 $\|p-q\|^2$ sans biais (v1) & \code{l2\_unbiased(p, q)} \\
+résidu log-linéaire, prop.~\ref{prop:loglin} & \code{ms\_temperature.loglinear\_residual(c1, c2)} \\
+$1-\rho$ de Spearman, prop.~\ref{prop:rang} & \code{ms\_temperature.spearman\_distance(c1, c2)} \\
 classification, seuil $\tau$ & \code{cluster(endpoints, d, t)} \\
 MCC & \code{mcc(pred, truth)} \\
 \bottomrule
@@ -434,6 +483,7 @@ Le fichier \code{tests/test\_model\_equality.py} vérifie chaque propriété rev
   \item la TV est bien une distance sur des exemples (nulle sur elle-même, symétrique, inégalité triangulaire) ;
   \item \code{l2\_unbiased} est sans biais (Monte-Carlo, 20\,000 tirages) ;
   \item \code{cross\_formulation} a une espérance nulle quand les deux lois sont égales (proposition~\ref{prop:nul}), positive pour un écart constant (proposition~\ref{prop:gen}), et proche de 0 pour un écart qui change de direction à chaque formulation (simulation de l'heuristique du watermark) ;
+  \item le résidu log-linéaire et la distance de Spearman sont nuls sous un changement de température et positifs sous une déformation non affine des logits (propositions~\ref{prop:loglin} et~\ref{prop:rang}) ;
   \item la normalisation ignore le style (« Arr, I'd say Parrot! » donne \code{parrot}) et l'extraction des suites fonctionne.
 \end{itemize}
 
@@ -520,6 +570,8 @@ TP,TN,FP,FN & vrais/faux positifs/négatifs sur les paires \\
 \paragraph{Comment résistez-vous au watermark ?} Par des formulations qui finissent différemment et par un estimateur qui ne garde que les écarts cohérents d'une formulation à l'autre. C'est une heuristique, vérifiée sur \code{ref-06} (chapitre~3).
 
 \paragraph{Pourquoi des suites plutôt qu'un mot ?} Pour avoir 30 à 40 symboles par requête au lieu d'un, avec un budget de 100 requêtes par endpoint ; et parce que les erreurs des modèles quand ils imitent le hasard sont caractéristiques (FLIPS).
+
+\paragraph{Comment neutralisez-vous la température ?} Elle divise les logits par $T$ : les log-probabilités de deux endpoints du même modèle sont alors reliées par une droite (proposition~\ref{prop:loglin}), et l'ordre des réponses est conservé (proposition~\ref{prop:rang}). On mesure l'écart à la droite, ou au même classement.
 
 \paragraph{Comment choisissez-vous le seuil ?} En maximisant le MCC sur les neuf références, en vérifiant que le résultat reste stable autour de l'optimum (chapitre~3, section~4).
 

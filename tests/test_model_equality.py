@@ -91,3 +91,23 @@ def test_symbols_v3():
 def test_normalize_v4():
     assert normalize("What is 27 times 52?", "The answer is 1,404.", "kmul") == "1404"
     assert normalize("Capital of Peru?", "Lima.", "kcap") == "lima"
+
+
+def test_temperature_invariance():
+    """Propositions 3.4 et 3.5 : avec les comptages espérés (pas de bruit), un changement de température donne
+    résidu log-linéaire ~ 0 et Spearman = 0 ; une déformation non monotone des logits donne des valeurs > 0."""
+    import math
+    from ms_temperature import loglinear_residual, spearman_distance
+    z = [2.0, 1.5, 1.1, 0.7, 0.2, -0.3, -0.9, -1.4, -2.0, -2.6]
+
+    def counts(logits, T, N=10 ** 6):
+        w = [math.exp(v / T) for v in logits]
+        return Counter({str(i): round(N * x / sum(w)) for i, x in enumerate(w)})
+
+    c1, c2 = counts(z, 0.7), counts(z, 1.3)
+    assert loglinear_residual(c1, c2) < 1e-4
+    assert spearman_distance(c1, c2) < 1e-9
+    z_lora = [v + 0.8 * math.sin(3 * i) for i, v in enumerate(z)]   # déformation non affine des logits
+    c3 = counts(z_lora, 1.0)
+    assert loglinear_residual(c1, c3) > 0.05
+    assert spearman_distance(c1, c3) > 0.01
