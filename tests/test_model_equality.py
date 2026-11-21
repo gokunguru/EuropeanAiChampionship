@@ -131,3 +131,15 @@ def test_battery_extract_and_permutation():
     assert abs(stat(A, "e", "f", qs)) < 0.15
     assert perm_pvalue(A, "e", "f", qs, 500) > 0.05
     assert perm_pvalue(A, "e", "g", qs, 500) < 0.05
+
+
+def test_battery2_extract():
+    from ms_battery2 import extract, load_questions
+    assert extract("num", "2,321,528") == "2321528"
+    assert extract("letter", "B) check the upstream server logs") == "B"
+    assert extract("string", "'9Rv!3mQ-zP7k'") == "9Rv!3mQ-zP7k"
+    assert extract("refus", "I'm sorry, but I can't help with that.") == "refus"
+    assert extract("refus", "Tom, you absolute potato.") == "accepte"
+    assert extract("word", "Iqaluit") == "iqaluit"
+    qs = load_questions("AB")
+    assert len(qs) == 32 and len({q["id"] for q in qs}) == 32
