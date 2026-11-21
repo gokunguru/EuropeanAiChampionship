@@ -111,3 +111,23 @@ def test_temperature_invariance():
     c3 = counts(z_lora, 1.0)
     assert loglinear_residual(c1, c3) > 0.05
     assert spearman_distance(c1, c3) > 0.01
+
+
+def test_battery_extract_and_permutation():
+    """extract : dernier entier / dernier mot utile. Test de permutation : p-valeur grande sous H0, petite sous H1."""
+    import random
+    from ms_battery_analyze import extract, perm_pvalue, stat
+    assert extract("num", "Sure! 27 times 52 is 1,404.") == "1404"
+    assert extract("word", "The capital of Kazakhstan is Astana.") == "astana"
+    rng = random.Random(3)
+    qs = [f"q{i}" for i in range(20)]
+    truth = {q: str(rng.randint(0, 9)) for q in qs}
+    other = {q: (truth[q] if i % 3 else "x") for i, q in enumerate(qs)}    # modèle différent sur 1 question / 3
+
+    def sample(t):   # réponse modale avec proba 0,8, sinon une autre
+        return {q: [t[q] if rng.random() < 0.8 else "z" for _ in range(2)] for q in qs}
+
+    A = {"e": sample(truth), "f": sample(truth), "g": sample(other)}
+    assert abs(stat(A, "e", "f", qs)) < 0.15
+    assert perm_pvalue(A, "e", "f", qs, 500) > 0.05
+    assert perm_pvalue(A, "e", "g", qs, 500) < 0.05
