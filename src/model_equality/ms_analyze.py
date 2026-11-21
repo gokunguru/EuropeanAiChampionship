@@ -37,6 +37,19 @@ def normalize(prompt: str, response: str, qtype: str = "") -> str:
     return words[-1] if words else "<none>"
 
 
+def symbols(qtype: str, response: str) -> list:
+    """v3 : suite de symboles extraite d'une réponse de type "seq..." (ordre conservé)."""
+    t = response.lower()
+    if qtype == "seqnum":
+        return re.findall(r"\d+", t)
+    if qtype == "seqcoin":
+        return [w[0] for w in re.findall(r"\b(?:heads|tails|h|t)\b", t)]
+    if qtype == "seqletter":
+        return re.findall(r"\b([a-z])\b", t)
+    items = [i.strip() for i in re.split(r"[,\n;]", t) if i.strip()]
+    return [w[-1] for w in (re.findall(r"[a-zà-ÿ]+", i) for i in items) if w]
+
+
 def load_by_formulation(path: str) -> dict:
     """form[e][t][k] = Counter des réponses normalisées de e à la formulation k de la question de type t (v2)."""
     form = defaultdict(lambda: defaultdict(lambda: defaultdict(Counter)))
@@ -46,7 +59,14 @@ def load_by_formulation(path: str) -> dict:
                 r = json.loads(line)
                 if "_" in r["id"]:
                     t, k = r["id"].split("_", 1)
-                    form[r["endpoint"]][t][k][normalize(r["prompt"], r["response"], t)] += 1
+                    if t.startswith("seq"):
+                        # v3 : unigrammes et bigrammes, chacun comme une "distribution" séparée (t/u et t/b)
+                        seq = symbols(t, r["response"])
+                        form[r["endpoint"]][t + "/u"][k].update(seq)
+                        if t != "seqanimal":
+                            form[r["endpoint"]][t + "/b"][k].update(f"{a}>{b}" for a, b in zip(seq, seq[1:]))
+                    else:
+                        form[r["endpoint"]][t][k][normalize(r["prompt"], r["response"], t)] += 1
     return form
 
 
@@ -57,7 +77,7 @@ def cross_formulation(fe: dict, fe2: dict) -> float:
     formulation). Preuve : pour k != l, delta_k et delta_l sont indépendants (requêtes distinctes) et d'espérance nulle,
     donc E<delta_k, delta_l> = <E delta_k, E delta_l> = 0.
     Calcul en O(K) : sum_{k != l} <d_k, d_l> = ||sum_k d_k||^2 - sum_k ||d_k||^2."""
-    ks = sorted(set(fe) & set(fe2))
+    ks = sorted(k for k in set(fe) & set(fe2) if sum(fe[k].values()) and sum(fe2[k].values()))
     if len(ks) < 2:
         return 0.0
     total, diag = Counter(), 0.0

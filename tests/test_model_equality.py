@@ -78,3 +78,11 @@ def test_cross_formulation_properties():
     assert abs(res["same"]) < 0.01
     assert res["lora"] > 0.015
     assert abs(res["wm"]) < res["lora"] / 2
+
+
+def test_symbols_v3():
+    from ms_analyze import symbols
+    assert symbols("seqnum", "Sure: 3, 7, 10, 12") == ["3", "7", "10", "12"]
+    assert symbols("seqcoin", "H T T heads H") == ["h", "t", "t", "h", "h"]
+    assert symbols("seqletter", "Q W E R") == ["q", "w", "e", "r"]
+    assert symbols("seqanimal", "Lion, Polar Bear, cat") == ["lion", "bear", "cat"]
