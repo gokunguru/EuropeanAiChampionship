@@ -145,3 +145,12 @@ def test_battery2_extract():
     assert len(qs) == 34 and len({q["id"] for q in qs}) == 34
     assert extract("version", "Python 3.12.1") == "3.12.1"
     assert extract("raw", "October 2023.") == "october 2023"
+
+
+def test_batch_prompt_and_parse():
+    from ms_batch import batches, prompt, parse
+    bs = batches()
+    assert all(len(b) <= 9 for b in bs) and sum(len(b) for b in bs) == 33
+    assert "Answer with" not in prompt(bs[0])
+    got = parse(bs[0], "1. 1404\n3. 34719\n2) 6,278")
+    assert got["mul01"] == "1404" and got["mul04"] == "6278" and got["fam23"] == "<absent>"
