@@ -1,130 +1,535 @@
-\documentclass[11pt,a4paper]{article}
+\documentclass[11pt,a4paper]{report}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage{lmodern}
-\usepackage[margin=2.2cm]{geometry}
+\usepackage{mathpazo}
+\usepackage[scaled=0.92]{helvet}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage[expansion=false]{microtype}
 \usepackage{amsmath,amssymb,amsthm}
-\usepackage{booktabs}
-\usepackage{listings}
+\usepackage{booktabs,array}
+\usepackage{enumitem}
 \usepackage{xcolor}
-\usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage[most]{tcolorbox}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage[colorlinks=true,linkcolor=bleu,urlcolor=bleu,citecolor=bleu]{hyperref}
 
-\newtheorem{proposition}{Proposition}
+% ---------- couleurs et titres ----------
+\definecolor{bleu}{HTML}{1F4E79}
+\definecolor{bleuclair}{HTML}{EAF1F8}
+\definecolor{orange}{HTML}{B5541B}
+\definecolor{orangeclair}{HTML}{FBEFE6}
+\definecolor{vertclair}{HTML}{EAF5EC}
+\definecolor{vert}{HTML}{2E6B3A}
+
+\titleformat{\chapter}[display]{\color{bleu}\sffamily}{\small\MakeUppercase{Chapitre \thechapter}}{4pt}{\LARGE\bfseries}
+\titlespacing*{\chapter}{0pt}{0pt}{18pt}
+\titleformat{\section}{\color{bleu}\sffamily\large\bfseries}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\color{bleu}\sffamily\bfseries}{\thesubsection}{0.8em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\sffamily\leftmark}
+\fancyhead[R]{\small\sffamily Model Equality · kame\_network}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+% ---------- encadrés ----------
+\newtcolorbox{intuition}{enhanced,breakable,colback=bleuclair,colframe=bleuclair,boxrule=0pt,arc=1pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt,fonttitle=\sffamily\bfseries\small,coltitle=bleu,
+  title=Intuition,attach title to upper={\par\smallskip}}
+\newtcolorbox{pourquoi}{enhanced,breakable,colback=bleuclair,colframe=bleuclair,boxrule=0pt,arc=1pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt,fonttitle=\sffamily\bfseries\small,coltitle=bleu,
+  title=Pourquoi ce choix ?,attach title to upper={\par\smallskip}}
+\newtcolorbox{exemple}{enhanced,breakable,colback=gray!7,colframe=gray!7,boxrule=0pt,arc=1pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt,fonttitle=\sffamily\bfseries\small,coltitle=black!70,
+  title=Exemple chiffré,attach title to upper={\par\smallskip}}
+\newtcolorbox{limite}{enhanced,breakable,colback=orangeclair,colframe=orangeclair,boxrule=0pt,arc=1pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt,fonttitle=\sffamily\bfseries\small,coltitle=orange,
+  title=Limite,attach title to upper={\par\smallskip}}
+\newtcolorbox{retenir}{enhanced,breakable,colback=vertclair,colframe=vertclair,boxrule=0pt,arc=1pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt,fonttitle=\sffamily\bfseries\small,coltitle=vert,
+  title=À retenir,attach title to upper={\par\smallskip}}
+
 \theoremstyle{definition}
-\newtheorem{definition}{Définition}
-\theoremstyle{remark}
-\newtheorem*{remarque}{Remarque}
-\newtheorem*{heuristique}{Heuristique (non prouvé)}
+\newtheorem{definition}{Définition}[chapter]
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}[chapter]
+\renewcommand{\proofname}{Preuve}
 
-\lstset{basicstyle=\ttfamily\small,columns=fullflexible,keepspaces=true,frame=single,backgroundcolor=\color{gray!8}}
-
-\title{Cours 1 --- Tâche \emph{Model Equality}\\\large European AI Championship Paris, équipe kame\_network}
-\author{MSMechichi}
-\date{21 novembre 2026}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\code}[1]{\texttt{#1}}
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\emergencystretch}{2.5em}
 
 \begin{document}
-\maketitle
 
-\section{Le problème}
+% =====================================================================
+\begin{titlepage}
+\setlength{\parindent}{0pt}
+\sffamily
+{\small\color{bleu} EUROPEAN AI CHAMPIONSHIP PARIS · CISPA × FRAUNHOFER AISEC · 21–22 NOVEMBRE 2026}
+\vspace{3cm}
 
-\paragraph{Notations.}
-\begin{itemize}
-  \item $E = \{\texttt{ep-01},\dots,\texttt{ep-33}\}$ : les endpoints notés ; $R = \{\texttt{ref-01},\dots,\texttt{ref-09}\}$ : les endpoints de référence (gratuits, réponses connues).
-  \item Pour un prompt $x$, l'endpoint $e$ renvoie une réponse $y \sim P_e(\cdot \mid x)$, tirée au hasard (la température est imposée par le serveur et ignorée si on la passe).
-  \item $f(e)$ : famille (modèle de base) ; $m(e)$ : modèle exact (checkpoint, quantization, LoRA). $m(e) = m(e') \Rightarrow f(e) = f(e')$.
-\end{itemize}
+{\Huge\bfseries\color{bleu} Reconnaître un modèle\\[4pt] derrière une API}
+\vspace{0.6cm}
 
-\paragraph{Ce qui compte et ce qui ne compte pas.}
+{\Large Tâche 33 « Model Equality » : ce qu'on cherche,\\ les outils dont on a besoin, et la méthode construite}
+\vspace{2.5cm}
+
+{\large Mohamed-Souleyman Mechichi (MSMechichi)}\\[2pt]
+Équipe kame\_network : Kamil, Erwan, Anis, Mohamed-Souleyman
+\vfill
+{\small Cours 1 · Version du 21 novembre 2026, 18 h · Document interne à l'équipe}
+\end{titlepage}
+
+% =====================================================================
+\chapter*{Résumé}
+\addcontentsline{toc}{chapter}{Résumé}
+
+Le serveur du hackathon expose 33 \emph{endpoints}, c'est-à-dire 33 adresses auxquelles on envoie un texte et qui renvoient la réponse d'un modèle de langage. Plusieurs endpoints servent en réalité le même modèle, mais déguisé : un prompt système différent, un personnage imposé, un tatouage numérique (\emph{watermark}) ou une autre façon de tirer les mots. D'autres servent un modèle vraiment modifié : version compressée (quantization) ou ajustée par un petit module (LoRA). La tâche est de dire, pour chaque endpoint, de quelle famille de modèles il vient et quel modèle exact il sert, en voyant seulement les textes renvoyés, avec au plus 100 réponses par endpoint.
+
+Le parti pris de notre méthode tient en une phrase : on compare des \emph{distributions} de réponses, avec une statistique construite pour être nulle en moyenne quand deux endpoints servent le même modèle, et pour rester insensible aux déguisements. Concrètement, on pose des questions dont la réponse est une suite courte (« 30 nombres au hasard entre 1 et 10 »), sous plusieurs formulations, et on mesure si les écarts entre deux endpoints vont dans la même direction d'une formulation à l'autre. Un vrai changement de poids donne des écarts cohérents ; un watermark, qui dépend du texte qui précède, donne des écarts qui changent de direction et se compensent.
+
+L'estimateur est défini et ses propriétés sont démontrées au chapitre~3 ; elles sont aussi vérifiées par simulation dans les tests du dépôt. Son comportement sur les vrais endpoints de référence est en cours de mesure : à l'heure où ce document est écrit, la première version (un mot par réponse) n'atteignait qu'un MCC de 0,23 sur les références, ce qui a motivé la version actuelle.
+
+% =====================================================================
+\chapter*{Comment lire ce document}
+\addcontentsline{toc}{chapter}{Comment lire ce document}
+
+Ce document s'adresse à un membre de l'équipe qui n'a jamais travaillé sur les modèles de langage ni sur les tests statistiques, mais qui est à l'aise avec les probabilités et l'algèbre linéaire de base. Chaque notion est d'abord motivée par le problème qu'elle résout, puis expliquée par une image mentale, puis écrite en équations, et enfin illustrée par les chiffres de la tâche. Quand un résultat n'est pas démontré, le texte le dit.
+
+\paragraph{Les encadrés.}
+
+\begin{intuition}Une image mentale ou une analogie, pour saisir l'idée avant les équations.\end{intuition}
+\begin{pourquoi}La justification d'un choix : ce qu'on a retenu, ce qu'on a écarté et pourquoi.\end{pourquoi}
+\begin{exemple}Un calcul fait avec des valeurs réelles de la tâche.\end{exemple}
+\begin{limite}Ce que la méthode ne fait pas, ou ce qui n'est pas encore prouvé.\end{limite}
+\begin{retenir}L'essentiel d'une section, en quelques lignes.\end{retenir}
+
+\paragraph{Conventions.} Les noms en police à chasse fixe désignent des fichiers ou des fonctions du dépôt (\code{src/model\_equality/...}). Le pronom « on » désigne l'équipe. Les notations sont rassemblées en annexe~B, le vocabulaire en annexe~A, et des questions de soutenance avec leurs réponses en annexe~C.
+
+\tableofcontents
+
+% =====================================================================
+\chapter{Le problème}
+
+\section{La tâche en une phrase}
+
+On dispose de 33 endpoints notés \code{ep-01} à \code{ep-33}. Pour chacun, il faut donner deux étiquettes : sa \emph{famille} (le modèle de base dont il est construit) et son \emph{modèle} exact. Deux endpoints ont la même étiquette de modèle s'ils servent exactement le même réseau de neurones ; ils ont alors forcément la même famille.
+
+\section{Modèle de langage, token, endpoint}
+
+\begin{definition}[Token]
+Un \emph{token} est l'unité de texte que manipule un modèle de langage : un mot courant, un morceau de mot ou un signe de ponctuation. Le texte « Bonjour, monde » peut par exemple être découpé en quatre tokens : \code{Bon}, \code{jour}, \code{,}, \code{ monde}. On note $\mathcal V$ l'ensemble des tokens possibles, appelé \emph{vocabulaire} (quelques dizaines de milliers d'éléments).
+\end{definition}
+
+\begin{definition}[Modèle de langage]
+Un \emph{modèle de langage} est une fonction qui, à un début de texte $x = (x_1,\dots,x_n) \in \mathcal V^n$, associe une loi de probabilité sur le token suivant : pour chaque $v\in\mathcal V$, un nombre $\pi_\theta(v \mid x) \ge 0$, avec $\sum_{v} \pi_\theta(v\mid x) = 1$. Ici $\theta$ désigne les \emph{poids} du réseau, c'est-à-dire les quelques milliards de nombres réels appris pendant l'entraînement.
+\end{definition}
+
+\begin{definition}[Endpoint]
+Un \emph{endpoint} est une adresse web à laquelle on envoie un message (le \emph{prompt}) et qui renvoie une réponse générée par un modèle. Ici, on envoie une requête HTTP au serveur du hackathon en indiquant le nom de l'endpoint (\code{ep-07}, par exemple) ; on reçoit uniquement le texte de la réponse, sans les probabilités $\pi_\theta$.
+\end{definition}
+
+\section{Comment une réponse est produite}
+
+Pour répondre, le modèle génère les tokens un par un : il calcule $\pi_\theta(\cdot\mid x)$, \emph{tire au hasard} un token selon cette loi, l'ajoute au texte, et recommence jusqu'à un token de fin ou jusqu'à une longueur maximale (ici 256 tokens).
+
+\begin{definition}[Température]
+Avant le tirage, on peut « aplatir » ou « durcir » la loi avec un paramètre $T>0$, la \emph{température} : on tire selon $\pi^{(T)}(v\mid x) \propto \pi_\theta(v\mid x)^{1/T}$. Quand $T\to0$, on prend toujours le token le plus probable (réponse déterministe) ; quand $T$ est grand, le tirage devient presque uniforme.
+\end{definition}
+
+\begin{intuition}
+Le modèle ne « choisit » pas une réponse : il lance un dé pipé à chaque mot. Poser deux fois la même question donne donc deux réponses différentes. Ce qui caractérise le modèle n'est pas une réponse, c'est la façon dont son dé est pipé, c'est-à-dire la \emph{loi} des réponses.
+\end{intuition}
+
+\begin{exemple}
+On a envoyé cinq fois « Write a sentence about the sea » à \code{ref-01} en demandant une température nulle. Les cinq réponses étaient différentes. Le serveur ignore donc la température qu'on lui passe : on ne pourra jamais obtenir de réponse déterministe, et toute la méthode doit être statistique. On a aussi vérifié que l'API ne renvoie pas les probabilités des tokens.
+\end{exemple}
+
+On note $P_e(\cdot \mid x)$ la loi de la réponse complète $y$ que renvoie l'endpoint $e$ au prompt $x$.
+
+\section{Ce qui change le modèle}
+
+\begin{definition}[Quantization]
+La \emph{quantization} consiste à stocker les poids $\theta$ avec moins de précision, par exemple sur 8 bits (format \emph{fp8}) au lieu de 16 ou 32, pour économiser de la mémoire et du calcul. Les poids deviennent $\tilde\theta \approx \theta$ : les probabilités $\pi_{\tilde\theta}$ changent un peu.
+\end{definition}
+
+\begin{definition}[LoRA et force]
+Une \emph{LoRA} (\emph{Low-Rank Adaptation}) modifie une matrice de poids $W\in\mathbb R^{d\times d}$ en lui ajoutant un terme de petit rang : $W' = W + \alpha\, BA$, avec $B\in\mathbb R^{d\times r}$, $A\in\mathbb R^{r\times d}$, $r \ll d$. Les matrices $A,B$ sont apprises sur une tâche particulière ; le coefficient $\alpha$ est la \emph{force} de la LoRA. Une force de 0,3 modifie peu le modèle, une force de 1,5 le modifie beaucoup.
+\end{definition}
+
+Changer de \emph{checkpoint} (un autre fichier de poids, par exemple une autre version d'entraînement), quantizer ou ajouter une LoRA change le modèle au sens de la tâche.
+
+\section{Ce qui ne change pas le modèle : les déguisements}
+
+\begin{definition}[Prompt système, persona]
+Un \emph{prompt système} est un texte caché ajouté avant le message de l'utilisateur (« Tu es un assistant concis »). Un \emph{persona} est un prompt système qui impose un personnage (« Tu es un pirate »). Les poids $\theta$ ne changent pas, mais le début de texte $x$ change, donc les réponses aussi.
+\end{definition}
+
+\begin{definition}[Watermark de décodage]
+Un \emph{watermark} (tatouage) de décodage, dans sa version la plus connue (Kirchenbauer et al., 2023), fonctionne ainsi : à chaque étape, on calcule un nombre pseudo-aléatoire à partir du \emph{token précédent}, on s'en sert pour tirer une « liste verte » contenant une partie du vocabulaire, et on augmente légèrement la probabilité des tokens de cette liste. Un détecteur qui connaît la clé reconnaît ensuite le texte à son excès de tokens verts. Les poids ne changent pas : seule la règle de tirage change.
+\end{definition}
+
+\begin{definition}[Stratégie de décodage]
+La \emph{stratégie de décodage} est la règle de tirage des tokens : température, ou troncature de la loi aux tokens les plus probables (\emph{top-k}, \emph{top-p}). Elle ne modifie pas les poids.
+\end{definition}
+
+\begin{retenir}
 \begin{center}
-\begin{tabular}{ll}
+\begin{tabular}{p{0.44\linewidth}p{0.44\linewidth}}
 \toprule
-Change $m(e)$ (à détecter) & Ne change pas $m(e)$ (déguisements à ignorer) \\
+\textbf{Change le modèle} (à détecter) & \textbf{Ne change pas le modèle} (à ignorer) \\
 \midrule
-quantization (fp8), LoRA (forces 0.3, 0.7, 1.5) & prompt système, persona, watermark, température \\
+autre checkpoint, quantization (fp8), LoRA (forces 0,3 ; 0,7 ; 1,5) & prompt système, persona, watermark, température \\
 \bottomrule
 \end{tabular}
 \end{center}
-Le piège : un déguisement modifie $P_e$ sans modifier $m(e)$. Un test qui détecte \emph{toute} différence de loi (comme celui de Gao et al.\ 2024) répondrait donc « différent » à tort.
+Le piège de la tâche : un déguisement modifie la loi des réponses $P_e$, alors que le modèle reste le même. Un test qui détecte \emph{toute} différence de loi se trompera donc sur les déguisements.
+\end{retenir}
 
-\paragraph{Contraintes.} 100 réponses par endpoint noté (pour toute l'équipe, définitif), 4 requêtes simultanées, 256 tokens au plus par réponse.
+\section{Les contraintes}
 
-\paragraph{Score.}
-Pour une paire $\{e,e'\}$, la prédiction est « même modèle » ou non. Avec $TP, TN, FP, FN$ comptés sur les paires,
-\[
-\mathrm{MCC} = \frac{TP\cdot TN - FP\cdot FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}} \in [-1,1],
-\]
-ramené à 0 s'il est négatif. Score final : $0{,}1 \times$ MCC(même famille, toutes les paires) $+\ 0{,}9 \times$ MCC(même modèle, paires d'une même famille).
+\begin{itemize}
+  \item \textbf{Budget} : 100 réponses par endpoint noté, pour toute l'équipe, sans possibilité de recharger.
+  \item \textbf{Parallélisme} : 4 requêtes simultanées au plus par équipe. En pratique, le serveur répond à environ 50 requêtes courtes par minute.
+  \item \textbf{Références} : neuf endpoints \code{ref-01} à \code{ref-09}, gratuits et jamais notés, servent un autre petit modèle avec les mêmes types de déguisements et de pièges. Leurs bonnes réponses sont dans \code{practice\_answers.csv}.
+  \item \textbf{Soumissions} : un fichier CSV \code{endpoint,family,model}, et 30 minutes d'attente entre deux soumissions.
+\end{itemize}
 
-\section{Idée de la méthode}
+\begin{exemple}
+Les bonnes réponses des références :
+\begin{center}\small
+\begin{tabular}{llll}
+\toprule
+endpoint & famille & modèle & ce qui a été fait \\
+\midrule
+\code{ref-01} & P & S & rien \\
+\code{ref-03} & P & S & prompt système \\
+\code{ref-05} & P & S & persona \\
+\code{ref-06} & P & S & watermark \\
+\code{ref-08} & P & S & température 1,0 \\
+\code{ref-02} & P & T1 & quantization fp8 \\
+\code{ref-09} & P & T2 & LoRA de force 0,3 \\
+\code{ref-04} & P & T3 & LoRA de force 0,7 \\
+\code{ref-07} & P & T4 & LoRA de force 1,5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Cinq endpoints servent le même modèle S sous quatre déguisements différents, et quatre servent chacun un modèle distinct.
+\end{exemple}
 
-On pose des questions à réponse très courte (« un nombre entre 1 et 10 », « un animal »). Une fonction de normalisation $\varphi$ réduit chaque réponse à un symbole (« Arr, I'd say Parrot! » $\mapsto$ \texttt{parrot}), ce qui efface en grande partie le style du persona. On compare ensuite les \emph{distributions} de symboles.
+\section{Le score}
 
-\begin{definition}[Types et formulations]
-Un type de question $t$ (\texttt{num10}, \texttt{animal}, \dots) est posé sous $K$ formulations $k = 1,\dots,K$ qui se terminent par des tokens différents. On note $p_{e,t,k}$ la loi de $\varphi(y)$ quand on pose la formulation $k$ à l'endpoint $e$, et $\hat p_{e,t,k}$ sa fréquence empirique.
+\begin{definition}[Paires et matrice de confusion]
+On considère toutes les paires $\{e,e'\}$ d'endpoints distincts. Pour chaque paire, la \emph{vérité} est « même modèle » (positif) ou non (négatif), et notre \emph{prédiction} aussi. On compte : $TP$ les paires positives prédites positives (vrais positifs), $TN$ les vrais négatifs, $FP$ les faux positifs (prédites « même modèle » à tort), $FN$ les faux négatifs.
 \end{definition}
+
+\begin{definition}[Coefficient de corrélation de Matthews]
+\[
+\mathrm{MCC} = \frac{TP\cdot TN - FP\cdot FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}} \in [-1,\,1].
+\]
+Il vaut 1 pour une prédiction parfaite, 0 pour une prédiction qui ne fait pas mieux que le hasard, $-1$ pour une prédiction systématiquement inverse. Le serveur ramène les valeurs négatives à 0. Si un facteur du dénominateur est nul (par exemple, on prédit tout « différent »), on pose $\mathrm{MCC}=0$.
+\end{definition}
+
+Le score de la tâche est $0{,}1\times$ MCC(même famille, sur toutes les paires) $+\ 0{,}9\times$ MCC(même modèle, sur les paires d'une même famille).
+
+\begin{pourquoi}
+Le MCC plutôt que le taux de bonnes réponses : il y a beaucoup plus de paires négatives que positives. Sur les références, seules 10 paires sur 36 sont positives (les $\binom52$ paires du groupe S). Répondre « tout différent » donnerait 72\,\% de bonnes réponses, mais un MCC nul : le MCC ne récompense que ce qui est réellement détecté.
+\end{pourquoi}
+
+\begin{exemple}
+Sur les références (36 paires) : prédire « tout différent » donne $TP=0$, $TN=26$, $FP=0$, $FN=10$, donc MCC $=0$. Prédire juste partout sauf isoler \code{ref-06} (le watermark) donne $TP=6$, $FN=4$, $TN=26$, $FP=0$, donc MCC $=0{,}72$. Prédire juste partout sauf mettre \code{ref-02} (fp8) avec S donne $TP=10$, $FP=5$, $TN=21$, donc MCC $=0{,}73$. Une seule erreur sur un endpoint coûte donc plus d'un quart du score.
+\end{exemple}
+
+% =====================================================================
+\chapter{Les outils mathématiques}
+
+\section{Loi, fréquence empirique, espérance}
+
+\begin{definition}[Loi d'une réponse normalisée]
+On réduira chaque réponse $y$ à un symbole ou à une suite de symboles par une fonction de normalisation $\varphi$ (chapitre~3). Pour un endpoint $e$ et une question $x$, on note $p$ la loi du symbole $\varphi(y)$ : un vecteur $p=(p(a))_{a\in\mathcal A}$ indexé par l'ensemble $\mathcal A$ des symboles possibles, avec $p(a)\ge0$ et $\sum_a p(a)=1$.
+\end{definition}
+
+\begin{definition}[Fréquence empirique]
+Si on observe $n$ réponses indépendantes $a_1,\dots,a_n$, la \emph{fréquence empirique} est $\hat p(a) = \frac1n\#\{i : a_i = a\}$.
+\end{definition}
+
+\begin{proposition}\label{prop:freq}
+La fréquence empirique est sans biais : $\E[\hat p(a)] = p(a)$ pour tout $a$.
+\end{proposition}
+\begin{proof}
+$\hat p(a) = \frac1n\sum_i \mathbf 1\{a_i=a\}$ et $\E[\mathbf 1\{a_i=a\}] = \Pr(a_i=a) = p(a)$ ; on conclut par linéarité de l'espérance.
+\end{proof}
+
+\section{Indépendance}
+
+\begin{definition}
+Deux variables aléatoires $U,V$ sont \emph{indépendantes} si connaître la valeur de l'une ne renseigne pas sur l'autre ; formellement, $\Pr(U\in I, V\in J) = \Pr(U\in I)\Pr(V\in J)$ pour tous ensembles $I,J$.
+\end{definition}
+
+\begin{proposition}\label{prop:indep}
+Si $U$ et $V$ sont des vecteurs aléatoires indépendants (et intégrables), $\E\langle U,V\rangle = \langle \E U, \E V\rangle$, où $\langle u,v\rangle = \sum_a u(a)v(a)$ est le produit scalaire.
+\end{proposition}
+\begin{proof}
+$\E\langle U,V\rangle = \sum_a \E[U(a)V(a)] = \sum_a \E[U(a)]\,\E[V(a)]$, car l'espérance d'un produit de variables indépendantes est le produit des espérances.
+\end{proof}
+
+Deux requêtes distinctes au serveur donnent des réponses indépendantes : chaque réponse est tirée à neuf.
+
+\section{Mesurer l'écart entre deux lois}
+
+\begin{definition}[Norme et distance $L^2$]
+Pour deux lois $p,q$ sur $\mathcal A$, on pose $\|p-q\|^2 = \sum_a (p(a)-q(a))^2 = \langle p-q,\,p-q\rangle$.
+\end{definition}
+
+\begin{definition}[Distance en variation totale]
+$\mathrm{TV}(p,q) = \frac12\sum_a |p(a)-q(a)| \in [0,1]$. Elle vaut 0 si et seulement si $p=q$, et 1 si les deux lois n'ont aucun symbole en commun.
+\end{definition}
+
+\begin{intuition}
+L'idée naïve consiste à remplacer $p$ et $q$ par leurs fréquences empiriques et à calculer $\mathrm{TV}(\hat p,\hat q)$. Le problème : même si $p=q$, deux petits échantillons ne se ressemblent pas, à cause du hasard du tirage. La distance mesurée est alors grande, et elle mesure le bruit plutôt qu'une vraie différence.
+\end{intuition}
+
+\begin{exemple}
+Deux échantillons tirés de la \emph{même} loi uniforme sur 10 symboles donnent en moyenne $\mathrm{TV}(\hat p,\hat q)\approx 0{,}65$ pour $n=5$ réponses chacun, 0,30 pour $n=30$, et encore 0,17 pour $n=100$ (calcul par simulation). C'est exactement ce qu'on a observé avec la première version : toutes les distances entre références valaient entre 0,6 et 0,8, que les endpoints servent le même modèle ou non.
+\end{exemple}
+
+Le remède est de construire des estimateurs \emph{sans biais} de l'écart : des statistiques dont l'espérance vaut exactement 0 quand $p=q$, quel que soit le nombre d'échantillons. Le bruit fait alors osciller la valeur autour de 0, au lieu de la décaler vers le haut. C'est l'idée des tests MMD (\emph{Maximum Mean Discrepancy}) de Gao, Liang et Guestrin (2024), qui ont formalisé ce problème sous le nom de \emph{model equality testing}.
+
+% =====================================================================
+\chapter{La méthode}
+
+\section{La démarche, impasses comprises}
+
+\begin{center}
+\begin{tikzpicture}[node distance=0.5cm and 0.5cm, box/.style={draw=bleu,rounded corners=2pt,fill=bleuclair,align=center,font=\small\sffamily,minimum height=1.1cm,text width=3.1cm}, >=Stealth]
+\node[box] (v1) {v1 : un mot,\\distance TV\\\textbf{MCC 0}};
+\node[box,right=of v1] (l2) {v1 : un mot,\\$L^2$ sans biais\\\textbf{MCC 0,23}};
+\node[box,right=of l2] (v2) {v2 : formulations\\variées\\(contre le watermark)};
+\node[box,right=of v2] (v3) {v3 : suites\\aléatoires\\(plus d'information)};
+\draw[->,bleu,thick] (v1)--(l2); \draw[->,bleu,thick] (l2)--(v2); \draw[->,bleu,thick] (v2)--(v3);
+\end{tikzpicture}
+\end{center}
+
+\paragraph{v1.} Dix questions à réponse d'un mot (« un nombre entre 1 et 100 », « un animal »…), comparées par la distance TV : MCC nul, pour la raison vue au chapitre~2. En remplaçant la TV par un estimateur sans biais de $\|p-q\|^2$, le MCC monte à 0,23 sur 542 réponses, et la matrice des distances révèle le vrai problème : \code{ref-06}, le watermark, est loin de tous les autres alors qu'il sert le même modèle que \code{ref-01}.
+
+\paragraph{v2.} Le watermark tire sa liste verte à partir du token précédent. Or toutes nos questions finissaient par « only. » : le premier token de la réponse était donc toujours biaisé de la même façon, et ce biais s'accumulait. D'où l'idée de poser chaque question sous plusieurs formulations qui finissent par des tokens différents.
+
+\paragraph{v3.} Un mot par réponse apporte très peu d'information, alors qu'on n'a que 100 réponses par endpoint. Le papier FLIPS (Richardeau et al., 2026) montre que les modèles génèrent mal le hasard et que leurs erreurs les identifient. On demande donc des \emph{suites} : une réponse fournit 30 à 40 symboles au lieu d'un.
+
+\section{Les questions et la normalisation}
+
+\begin{definition}[Types, formulations]
+Un \emph{type} de question $t$ est une consigne : \code{seqnum} (30 entiers entre 1 et 10), \code{seqcoin} (40 lancers de pièce, H ou T), \code{seqletter} (30 lettres), \code{seqanimal} (15 animaux). Chaque type est posé sous $K=8$ \emph{formulations} $k=1,\dots,K$, dont les fins sont différentes (« Output only the numbers. », « …no text → », « …please »…).
+\end{definition}
+
+\begin{definition}[Normalisation et symboles]
+La fonction $\varphi_t$ extrait d'une réponse la suite des symboles utiles : les entiers pour \code{seqnum}, les H/T pour \code{seqcoin}, les lettres isolées pour \code{seqletter}, le dernier mot de chaque élément de liste pour \code{seqanimal}. Tout le reste (« Sure! Here are your numbers: ») est ignoré.
+\end{definition}
+
+\begin{definition}[Unigrammes, bigrammes]
+D'une suite $(s_1,\dots,s_L)$, on tire deux comptages : les \emph{unigrammes} (combien de fois chaque symbole apparaît) et les \emph{bigrammes} (combien de fois chaque couple de symboles consécutifs $s_i \to s_{i+1}$ apparaît). Les bigrammes capturent les habitudes de répétition : un modèle qui évite de répéter deux fois le même chiffre a peu de bigrammes \code{3>3}. Chacun des deux comptages, divisé par son total, donne un vecteur de fréquences ; on traite les unigrammes et les bigrammes d'un même type comme deux types séparés, notés \code{t/u} et \code{t/b}.
+\end{definition}
+
+On note $\hat p_{e,t,k}$ le vecteur de fréquences obtenu pour l'endpoint $e$, le type $t$ et la formulation $k$, et $p_{e,t,k} = \E[\hat p_{e,t,k}]$ sa valeur moyenne.
+
+\begin{pourquoi}
+Des réponses courtes et contraintes plutôt que des textes libres : un persona change fortement le style d'un texte libre (vocabulaire, ton), alors qu'il influence peu une liste de chiffres. Les textes libres seraient plus riches, mais justement trop sensibles aux déguisements.
+\end{pourquoi}
 
 \section{L'estimateur croisé entre formulations}
 
-\begin{definition}
-Pour deux endpoints $e,e'$ et un type $t$, on pose $\delta_k = p_{e,t,k} - p_{e',t,k}$ (vecteur indexé par les symboles) et $\hat\delta_k = \hat p_{e,t,k} - \hat p_{e',t,k}$. L'estimateur est
+\begin{definition}[Écarts et estimateur]
+Pour deux endpoints $e,e'$ et un type $t$, on pose, pour chaque formulation $k$,
 \[
-D_t(e,e') = \frac{1}{K(K-1)} \sum_{k \neq l} \langle \hat\delta_k , \hat\delta_l \rangle
-= \frac{\bigl\| \sum_k \hat\delta_k \bigr\|^2 - \sum_k \|\hat\delta_k\|^2}{K(K-1)},
-\qquad d(e,e') = \frac{1}{|T|}\sum_{t\in T} D_t(e,e').
+\delta_k = p_{e,t,k}-p_{e',t,k}, \qquad \hat\delta_k = \hat p_{e,t,k}-\hat p_{e',t,k}.
 \]
+L'estimateur est la moyenne des produits scalaires entre écarts de formulations \emph{différentes} :
+\[
+D_t(e,e') = \frac{1}{K(K-1)}\sum_{k\neq l}\langle\hat\delta_k,\hat\delta_l\rangle
+= \frac{\bigl\|\sum_k\hat\delta_k\bigr\|^2 - \sum_k\|\hat\delta_k\|^2}{K(K-1)}.
+\]
+La distance entre endpoints est la moyenne sur les types : $d(e,e') = \frac1{|T|}\sum_{t\in T} D_t(e,e')$.
 \end{definition}
 
-\begin{proposition}\label{prop:nul}
-Si $p_{e,t,k} = p_{e',t,k}$ pour tout $k$ (même loi de réponse), alors $\mathbb{E}[D_t(e,e')] = 0$, quel que soit le nombre de réponses par formulation (même une seule).
+La seconde écriture vient de $\|\sum_k u_k\|^2 = \sum_k\|u_k\|^2 + \sum_{k\neq l}\langle u_k,u_l\rangle$ ; elle permet un calcul en $O(K)$ au lieu de $O(K^2)$.
+
+\begin{proposition}[Espérance nulle sous « même modèle »]\label{prop:nul}
+Si $p_{e,t,k}=p_{e',t,k}$ pour toute formulation $k$, alors $\E[D_t(e,e')]=0$, quel que soit le nombre de réponses par formulation, même une seule.
 \end{proposition}
 \begin{proof}
-Pour $k \neq l$, $\hat\delta_k$ et $\hat\delta_l$ sont calculés sur des requêtes distinctes, donc indépendants. Chaque fréquence empirique est sans biais : $\mathbb{E}[\hat p_{e,t,k}] = p_{e,t,k}$, d'où $\mathbb{E}[\hat\delta_k] = \delta_k = 0$. Par indépendance, $\mathbb{E}\langle\hat\delta_k,\hat\delta_l\rangle = \langle \mathbb{E}\hat\delta_k, \mathbb{E}\hat\delta_l\rangle = 0$, et on conclut par linéarité.
+Par la proposition~\ref{prop:freq}, $\E[\hat\delta_k] = \delta_k = 0$. Pour $k\neq l$, $\hat\delta_k$ et $\hat\delta_l$ sont calculés sur des requêtes distinctes, donc indépendants ; par la proposition~\ref{prop:indep}, $\E\langle\hat\delta_k,\hat\delta_l\rangle = \langle\delta_k,\delta_l\rangle = 0$. On conclut par linéarité.
 \end{proof}
 
-\begin{proposition}
-Sans hypothèse sur $e,e'$, $\mathbb{E}[D_t(e,e')] = \frac{1}{K(K-1)}\sum_{k\neq l}\langle \delta_k,\delta_l\rangle$. En particulier, si l'écart est le même pour toutes les formulations ($\delta_k = \delta$), $\mathbb{E}[D_t] = \|\delta\|^2 > 0$ dès que $\delta \neq 0$.
+\begin{proposition}[Espérance générale]\label{prop:gen}
+Sans hypothèse, $\E[D_t(e,e')] = \frac{1}{K(K-1)}\sum_{k\neq l}\langle\delta_k,\delta_l\rangle$. En particulier, si l'écart est le même pour toutes les formulations ($\delta_k=\delta$ pour tout $k$), alors $\E[D_t] = \|\delta\|^2 > 0$ dès que $\delta\neq0$.
 \end{proposition}
 \begin{proof}
-Même argument d'indépendance : $\mathbb{E}\langle\hat\delta_k,\hat\delta_l\rangle = \langle\delta_k,\delta_l\rangle$ pour $k\neq l$.
+Le même argument d'indépendance donne $\E\langle\hat\delta_k,\hat\delta_l\rangle = \langle\delta_k,\delta_l\rangle$ pour $k\neq l$. Si $\delta_k=\delta$, chacun des $K(K-1)$ termes vaut $\|\delta\|^2$.
 \end{proof}
 
-\begin{heuristique}
-Une LoRA ou une quantization modifie les poids : on s'attend à des écarts $\delta_k$ de même direction d'une formulation à l'autre, donc à $\mathbb{E}[D_t] > 0$. Un watermark de décodage favorise des tokens choisis à partir du contexte précédent : comme les formulations finissent différemment, les directions des $\delta_k$ varient « au hasard » et $\sum_{k\neq l}\langle\delta_k,\delta_l\rangle \approx 0$. Ce point n'est pas démontré ; on le vérifie sur les endpoints de référence (\texttt{ref-06} est watermarké).
-\end{heuristique}
+\begin{intuition}
+On regarde si les deux endpoints s'écartent \emph{dans la même direction} d'une formulation à l'autre. Une LoRA ou une quantization change les poids : elle pousse les réponses toujours dans le même sens, par exemple vers « 7 », quelle que soit la façon de poser la question. Les écarts sont alignés et leurs produits scalaires sont positifs. Un watermark, lui, favorise des tokens qui dépendent du texte précédent : d'une formulation à l'autre, il pousse dans des directions différentes, et les produits scalaires se compensent.
+\end{intuition}
 
-\begin{remarque}
-$D_t$ peut être négatif (c'est une estimation sans biais d'une quantité qui vaut 0 sous l'hypothèse « même modèle »). C'est normal.
-\end{remarque}
+\begin{limite}
+L'affirmation « pour un watermark, $\sum_{k\neq l}\langle\delta_k,\delta_l\rangle\approx0$ » est une \textbf{heuristique, non démontrée}. Elle suppose que les listes vertes sont à peu près indépendantes d'une formulation à l'autre, et que le biais introduit par le persona ou le prompt système est faible sur des listes de chiffres. Au sein d'une même suite, le watermark dépend aussi des symboles précédents, ce qui l'aide à se moyenner. Tout cela se vérifie sur \code{ref-06} (watermark), \code{ref-03} (prompt système) et \code{ref-05} (persona).
+\end{limite}
 
-\section{Du score de distance aux groupes}
+\begin{retenir}
+$D_t$ peut être négatif : c'est l'estimation sans biais d'une quantité qui vaut 0 quand les deux endpoints servent le même modèle. Une valeur proche de 0, positive ou négative, signifie « même modèle » ; une valeur nettement positive signifie « modèles différents ».
+\end{retenir}
 
-On regroupe les endpoints par \emph{classification ascendante hiérarchique à liaison moyenne} : on part d'un groupe par endpoint et on fusionne les deux groupes dont la distance moyenne est la plus petite, tant qu'elle est sous un seuil $\tau$. Le seuil $\tau$ est choisi pour maximiser le MCC sur les endpoints de référence, puis réutilisé sur les endpoints notés.
+\section{Des distances aux groupes}
 
-\section{Correspondance avec le code}
+\begin{definition}[Classification ascendante hiérarchique, liaison moyenne]
+On part d'un groupe par endpoint. À chaque étape, on calcule pour chaque paire de groupes $G,H$ la distance moyenne $\frac1{|G||H|}\sum_{e\in G,e'\in H}d(e,e')$, et on fusionne la paire la plus proche, tant que cette distance reste inférieure à un seuil $\tau$.
+\end{definition}
 
-\begin{center}
+Le seuil $\tau$ est choisi pour maximiser le MCC sur les neuf références, puis réutilisé tel quel sur les endpoints notés.
+
+\begin{limite}
+Choisir $\tau$ sur neuf endpoints seulement, et un autre modèle que celui des endpoints notés, expose au \emph{surapprentissage} : le seuil peut coller au hasard des neuf références sans se généraliser. Il faudra vérifier que le MCC reste bon dans toute une plage de seuils autour de l'optimum, et pas seulement en un point.
+\end{limite}
+
+\section{Les familles}
+
+La question des familles ne compte que pour 10\,\% du score, et toutes les références appartiennent à la même famille P : on ne peut donc pas régler cette partie sur les références. Des modèles de base différents (entraînés séparément) donnent des distances bien plus grandes que des variantes d'un même modèle (Gao et al., 2024). On regroupera donc les familles avec la même distance, à un seuil plus élevé. Cette partie reste \textbf{à faire}.
+
+\section{Le budget}
+
+Sur un endpoint noté, la version 3 utilise 4 types $\times$ 8 formulations $\times$ 3 répétitions $= 96$ requêtes, sur les 100 disponibles. Pour les 33 endpoints, cela fait 3\,168 requêtes, soit environ une heure et demie au rythme du serveur. Le plan sera validé sur les références avant de dépenser quoi que ce soit.
+
+% =====================================================================
+\chapter{Le code}
+
+\section{Correspondance avec les mathématiques}
+
+\begin{center}\small
 \begin{tabular}{ll}
 \toprule
-Objet mathématique & Fonction dans \texttt{ms\_analyze.py} \\
+Objet mathématique & Fonction ou fichier \\
 \midrule
-$\varphi$ & \texttt{normalize(prompt, response, qtype)} \\
-$\hat p_{e,t,k}$ (comptages) & \texttt{load\_by\_formulation(path)} \\
-$D_t(e,e')$ & \texttt{cross\_formulation(fe, fe2)} \\
-classification, seuil $\tau$ & \texttt{cluster(endpoints, d, t)} \\
-MCC & \texttt{mcc(pred, truth)} \\
+questions v3 (types, formulations) & \code{ms\_probe\_v3.py}, dictionnaire \code{PROBES} \\
+collecte des réponses & \code{query\_reference.query} (fourni), appelé par \code{ms\_probe\_v3.py} \\
+$\varphi_t$ (suites) & \code{symbols(qtype, response)} \\
+$\varphi$ (un mot, v1/v2) & \code{normalize(prompt, response, qtype)} \\
+comptages par formulation & \code{load\_by\_formulation(path)} \\
+$D_t(e,e')$ & \code{cross\_formulation(fe, fe2)} \\
+$\|p-q\|^2$ sans biais (v1) & \code{l2\_unbiased(p, q)} \\
+classification, seuil $\tau$ & \code{cluster(endpoints, d, t)} \\
+MCC & \code{mcc(pred, truth)} \\
 \bottomrule
 \end{tabular}
 \end{center}
-Les propositions sont vérifiées par Monte-Carlo dans \texttt{tests/test\_model\_equality.py} (espérance nulle sous « même modèle », positive pour un écart constant, proche de 0 pour un écart qui change avec la formulation).
 
-\section{Ce qu'on a observé (empirique)}
+\section{Les tests}
 
-Version 1 (une seule formulation par question, 667 réponses sur les références) : MCC $= 0{,}23$ seulement. \texttt{ref-06} (watermark) était loin de tous les autres, alors qu'il sert le même modèle que \texttt{ref-01} ; \texttt{ref-02} (fp8) et \texttt{ref-09} (LoRA 0.3) étaient très proches de \texttt{ref-01}. C'est ce qui a motivé la version 2 et l'estimateur croisé.
-
-\section*{Références}
+Le fichier \code{tests/test\_model\_equality.py} vérifie chaque propriété revendiquée :
 \begin{itemize}
-  \item I.~Gao, P.~Liang, C.~Guestrin, \emph{Model Equality Testing: Which Model Is This API Serving?}, arXiv:2410.20247 (2024). Test MMD à deux échantillons ; notre estimateur $D_t$ est une variante de leur MMD à noyau \emph{one-hot}. (Référence sûre.)
-  \item G.~Richardeau et al., \emph{FLIPS: Instance-Fingerprinting for LLMs via Pseudo-random Sequences}, alphaXiv 2606.03330 (2026). Empreinte par suites pseudo-aléatoires. (Lu via alphaXiv.)
+  \item la TV est bien une distance sur des exemples (nulle sur elle-même, symétrique, inégalité triangulaire) ;
+  \item \code{l2\_unbiased} est sans biais (Monte-Carlo, 20\,000 tirages) ;
+  \item \code{cross\_formulation} a une espérance nulle quand les deux lois sont égales (proposition~\ref{prop:nul}), positive pour un écart constant (proposition~\ref{prop:gen}), et proche de 0 pour un écart qui change de direction à chaque formulation (simulation de l'heuristique du watermark) ;
+  \item la normalisation ignore le style (« Arr, I'd say Parrot! » donne \code{parrot}) et l'extraction des suites fonctionne.
+\end{itemize}
+
+\section{Lancer la chaîne}
+
+Sur JURECA, dans le dossier \code{model\_equality} de l'équipe, avec la clé API dans la variable \code{ME\_KEY} :
+\begin{center}
+\code{python ms\_probe\_v3.py ref 2} \quad puis \quad \code{python ms\_analyze.py ms\_ref\_answers\_v3.jsonl practice\_answers.csv}
+\end{center}
+
+% =====================================================================
+\chapter{Résultats et état au 21 novembre, 18 h}
+
+\begin{center}\small
+\begin{tabular}{lll}
+\toprule
+Version & Données (références) & MCC « même modèle » \\
+\midrule
+v1, distance TV & 467 réponses & 0 \\
+v1, $L^2$ sans biais & 542 réponses & 0,23 \\
+v2 & 179 réponses (arrêtée) & non significatif \\
+v3 & en cours (576 réponses prévues) & à mesurer \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Une première soumission de référence (tout « différent ») a été envoyée pour vérifier la chaîne : score 0, comme prévu. Ce chapitre sera complété avec les résultats de la v3.
+
+% =====================================================================
+\appendix
+
+\chapter{Glossaire}
+
+\begin{description}[style=nextline,leftmargin=0.6cm]
+  \item[Bigramme] couple de deux symboles consécutifs dans une suite.
+  \item[Checkpoint] fichier contenant un jeu de poids d'un modèle.
+  \item[Endpoint] adresse web qui renvoie la réponse d'un modèle à un prompt.
+  \item[Famille] ensemble des modèles construits à partir d'un même modèle de base.
+  \item[LoRA] module de petit rang $\alpha BA$ ajouté aux poids pour adapter un modèle.
+  \item[MCC] coefficient de corrélation de Matthews, score calculé sur les paires.
+  \item[MMD] \emph{Maximum Mean Discrepancy} : écart entre deux lois mesuré par un noyau ; notre estimateur en est une variante.
+  \item[Persona] prompt système qui impose un personnage.
+  \item[Prompt (système)] texte envoyé au modèle ; le prompt système est caché et placé avant celui de l'utilisateur.
+  \item[Quantization] stockage des poids avec moins de bits (fp8 : 8 bits).
+  \item[Sans biais] se dit d'un estimateur dont l'espérance est égale à la quantité estimée.
+  \item[Température] paramètre qui aplatit ou durcit la loi de tirage des tokens.
+  \item[Token] unité de texte manipulée par le modèle.
+  \item[Watermark] tatouage du texte généré, obtenu en favorisant une liste de tokens tirée à partir du contexte.
+\end{description}
+
+\chapter{Notations}
+
+\begin{center}\small
+\begin{tabular}{>{$}l<{$}p{11cm}}
+\toprule
+\text{Symbole} & Signification \\
+\midrule
+E,\ R & endpoints notés (\code{ep-01}…\code{ep-33}) et de référence (\code{ref-01}…\code{ref-09}) \\
+e,\ e' & deux endpoints \\
+f(e),\ m(e) & famille et modèle de l'endpoint $e$ \\
+\theta & poids d'un modèle ; $\pi_\theta(v\mid x)$ probabilité du token $v$ après le texte $x$ \\
+P_e(\cdot\mid x) & loi de la réponse de $e$ au prompt $x$ \\
+t,\ T & type de question, ensemble des types \\
+k,\ l,\ K & indices de formulation, nombre de formulations ($K=8$) \\
+\varphi_t & normalisation : réponse $\mapsto$ symboles \\
+\hat p_{e,t,k},\ p_{e,t,k} & fréquences empiriques des symboles et leur espérance \\
+\delta_k,\ \hat\delta_k & écart (vrai, estimé) entre $e$ et $e'$ pour la formulation $k$ \\
+D_t(e,e') & estimateur croisé pour le type $t$ \\
+d(e,e') & distance entre endpoints (moyenne des $D_t$) \\
+\tau & seuil de la classification \\
+TP,TN,FP,FN & vrais/faux positifs/négatifs sur les paires \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\chapter{Questions de soutenance}
+
+\paragraph{Pourquoi ne pas simplement comparer les textes ?} Parce que les réponses sont tirées au hasard : deux réponses du même modèle diffèrent. Il faut comparer des lois, donc des statistiques sur de nombreuses réponses (chapitre~1, section~3).
+
+\paragraph{Pourquoi votre distance peut-elle être négative ?} Parce que c'est un estimateur sans biais d'une quantité nulle quand les endpoints servent le même modèle. Le bruit la fait osciller autour de 0 dans les deux sens (proposition~\ref{prop:nul}).
+
+\paragraph{Pourquoi pas la distance en variation totale ?} Elle est biaisée vers le haut avec peu d'échantillons : 0,65 en moyenne entre deux échantillons de 5 réponses de la même loi (chapitre~2).
+
+\paragraph{Comment résistez-vous au watermark ?} Par des formulations qui finissent différemment et par un estimateur qui ne garde que les écarts cohérents d'une formulation à l'autre. C'est une heuristique, vérifiée sur \code{ref-06} (chapitre~3).
+
+\paragraph{Pourquoi des suites plutôt qu'un mot ?} Pour avoir 30 à 40 symboles par requête au lieu d'un, avec un budget de 100 requêtes par endpoint ; et parce que les erreurs des modèles quand ils imitent le hasard sont caractéristiques (FLIPS).
+
+\paragraph{Comment choisissez-vous le seuil ?} En maximisant le MCC sur les neuf références, en vérifiant que le résultat reste stable autour de l'optimum (chapitre~3, section~4).
+
+% =====================================================================
+\chapter*{Références}
+\addcontentsline{toc}{chapter}{Références}
+\begin{itemize}
+  \item I.~Gao, P.~Liang, C.~Guestrin, \emph{Model Equality Testing: Which Model Is This API Serving?}, arXiv:2410.20247, 2024. Le problème formalisé comme un test à deux échantillons ; tests MMD, dont le noyau \emph{one-hot} dont notre estimateur est une variante. \emph{Référence sûre (lue).}
+  \item G.~Richardeau, G.~Dashyan, E.~Le~Merrer, G.~Tredan, \emph{FLIPS: Instance-Fingerprinting for LLMs via Pseudo-random Sequences}, alphaXiv 2606.03330, 2026. Empreinte des modèles par leurs suites « aléatoires ». \emph{Lu via alphaXiv.}
+  \item J.~Kirchenbauer et al., \emph{A Watermark for Large Language Models}, ICML 2023. Le watermark à liste verte décrit au chapitre~1. \emph{Référence connue, non relue pour ce document.}
 \end{itemize}
 
 \end{document}
