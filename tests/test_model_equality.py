@@ -39,3 +39,8 @@ def test_l2_unbiased_is_unbiased():
         vals = [l2_unbiased(Counter(rng.choices(support, A, k=5)), Counter(rng.choices(support, B, k=5)))
                 for _ in range(20000)]
         assert abs(sum(vals) / len(vals) - target) < 0.01
+
+
+def test_normalize_uses_question_type():
+    assert normalize("Roll a ten-sided die and tell me the result", "I rolled a 7!", "num10") == "7"
+    assert normalize("Pick any capital letter", "Sure — Q.", "letter") == "q"

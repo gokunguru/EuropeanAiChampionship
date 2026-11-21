@@ -23,13 +23,14 @@ from collections import Counter, defaultdict
 from itertools import combinations
 
 
-def normalize(prompt: str, response: str) -> str:
-    """Réduit une réponse à un symbole comparable (ignore la politesse et le style du persona)."""
+def normalize(prompt: str, response: str, qtype: str = "") -> str:
+    """Réduit une réponse à un symbole comparable (ignore la politesse et le style du persona).
+    qtype (type de question, v2) prime sur les mots-clés du prompt."""
     text = response.strip().lower()
-    if "integer" in prompt or "number" in prompt:
+    if qtype.startswith("num") or (not qtype and ("integer" in prompt or "number" in prompt)):
         m = re.search(r"-?\d+", text)
         return m.group(0) if m else "<none>"
-    if "letter" in prompt:
+    if qtype == "letter" or (not qtype and "letter" in prompt):
         letters = re.findall(r"\b([a-z])\b", text)
         return letters[-1] if letters else "<none>"
     words = re.findall(r"[a-zà-ÿ]+", text)
@@ -37,13 +38,15 @@ def normalize(prompt: str, response: str) -> str:
 
 
 def load(path: str) -> dict:
-    """dist[e][q] = Counter des réponses normalisées."""
+    """dist[e][q] = Counter des réponses normalisées. En v2 (id "<type>_<k>"), q = <type> : les formulations d'une
+    même question sont regroupées."""
     dist = defaultdict(lambda: defaultdict(Counter))
     with open(path, encoding="utf-8") as f:
         for line in f:
             if line.strip():
                 r = json.loads(line)
-                dist[r["endpoint"]][r["id"]][normalize(r["prompt"], r["response"])] += 1
+                qtype = r["id"].split("_")[0] if "_" in r["id"] else ""
+                dist[r["endpoint"]][qtype or r["id"]][normalize(r["prompt"], r["response"], qtype)] += 1
     return dist
 
 
