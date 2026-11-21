@@ -86,3 +86,8 @@ def test_symbols_v3():
     assert symbols("seqcoin", "H T T heads H") == ["h", "t", "t", "h", "h"]
     assert symbols("seqletter", "Q W E R") == ["q", "w", "e", "r"]
     assert symbols("seqanimal", "Lion, Polar Bear, cat") == ["lion", "bear", "cat"]
+
+
+def test_normalize_v4():
+    assert normalize("What is 27 times 52?", "The answer is 1,404.", "kmul") == "1404"
+    assert normalize("Capital of Peru?", "Lima.", "kcap") == "lima"

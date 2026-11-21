@@ -27,6 +27,12 @@ def normalize(prompt: str, response: str, qtype: str = "") -> str:
     """Réduit une réponse à un symbole comparable (ignore la politesse et le style du persona).
     qtype (type de question, v2) prime sur les mots-clés du prompt."""
     text = response.strip().lower()
+    if qtype in ("kmul", "kadd", "kseq"):
+        m = re.search(r"-?\d[\d,]*", text)
+        return m.group(0).replace(",", "") if m else "<none>"
+    if qtype in ("kcap", "krev"):
+        words = re.findall(r"[a-zà-ÿ]+", text)
+        return words[-1] if words else "<none>"
     if qtype.startswith("num") or (not qtype and ("integer" in prompt or "number" in prompt)):
         m = re.search(r"-?\d+", text)
         return m.group(0) if m else "<none>"
@@ -57,7 +63,7 @@ def load_by_formulation(path: str) -> dict:
         for line in f:
             if line.strip():
                 r = json.loads(line)
-                if "_" in r["id"]:
+                if "_" in r["id"] and not r["id"].startswith("k"):
                     t, k = r["id"].split("_", 1)
                     if t.startswith("seq"):
                         # v3 : unigrammes et bigrammes, chacun comme une "distribution" séparée (t/u et t/b)
@@ -100,7 +106,8 @@ def load(path: str) -> dict:
             if line.strip():
                 r = json.loads(line)
                 qtype = r["id"].split("_")[0] if "_" in r["id"] else ""
-                dist[r["endpoint"]][qtype or r["id"]][normalize(r["prompt"], r["response"], qtype)] += 1
+                key = r["id"] if qtype.startswith("k") else (qtype or r["id"])   # v4 : une distribution par question
+                dist[r["endpoint"]][key][normalize(r["prompt"], r["response"], qtype)] += 1
     return dist
 
 
