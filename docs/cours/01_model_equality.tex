@@ -1,0 +1,130 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\newtheorem{proposition}{Proposition}
+\theoremstyle{definition}
+\newtheorem{definition}{Définition}
+\theoremstyle{remark}
+\newtheorem*{remarque}{Remarque}
+\newtheorem*{heuristique}{Heuristique (non prouvé)}
+
+\lstset{basicstyle=\ttfamily\small,columns=fullflexible,keepspaces=true,frame=single,backgroundcolor=\color{gray!8}}
+
+\title{Cours 1 --- Tâche \emph{Model Equality}\\\large European AI Championship Paris, équipe kame\_network}
+\author{MSMechichi}
+\date{21 novembre 2026}
+
+\begin{document}
+\maketitle
+
+\section{Le problème}
+
+\paragraph{Notations.}
+\begin{itemize}
+  \item $E = \{\texttt{ep-01},\dots,\texttt{ep-33}\}$ : les endpoints notés ; $R = \{\texttt{ref-01},\dots,\texttt{ref-09}\}$ : les endpoints de référence (gratuits, réponses connues).
+  \item Pour un prompt $x$, l'endpoint $e$ renvoie une réponse $y \sim P_e(\cdot \mid x)$, tirée au hasard (la température est imposée par le serveur et ignorée si on la passe).
+  \item $f(e)$ : famille (modèle de base) ; $m(e)$ : modèle exact (checkpoint, quantization, LoRA). $m(e) = m(e') \Rightarrow f(e) = f(e')$.
+\end{itemize}
+
+\paragraph{Ce qui compte et ce qui ne compte pas.}
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Change $m(e)$ (à détecter) & Ne change pas $m(e)$ (déguisements à ignorer) \\
+\midrule
+quantization (fp8), LoRA (forces 0.3, 0.7, 1.5) & prompt système, persona, watermark, température \\
+\bottomrule
+\end{tabular}
+\end{center}
+Le piège : un déguisement modifie $P_e$ sans modifier $m(e)$. Un test qui détecte \emph{toute} différence de loi (comme celui de Gao et al.\ 2024) répondrait donc « différent » à tort.
+
+\paragraph{Contraintes.} 100 réponses par endpoint noté (pour toute l'équipe, définitif), 4 requêtes simultanées, 256 tokens au plus par réponse.
+
+\paragraph{Score.}
+Pour une paire $\{e,e'\}$, la prédiction est « même modèle » ou non. Avec $TP, TN, FP, FN$ comptés sur les paires,
+\[
+\mathrm{MCC} = \frac{TP\cdot TN - FP\cdot FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}} \in [-1,1],
+\]
+ramené à 0 s'il est négatif. Score final : $0{,}1 \times$ MCC(même famille, toutes les paires) $+\ 0{,}9 \times$ MCC(même modèle, paires d'une même famille).
+
+\section{Idée de la méthode}
+
+On pose des questions à réponse très courte (« un nombre entre 1 et 10 », « un animal »). Une fonction de normalisation $\varphi$ réduit chaque réponse à un symbole (« Arr, I'd say Parrot! » $\mapsto$ \texttt{parrot}), ce qui efface en grande partie le style du persona. On compare ensuite les \emph{distributions} de symboles.
+
+\begin{definition}[Types et formulations]
+Un type de question $t$ (\texttt{num10}, \texttt{animal}, \dots) est posé sous $K$ formulations $k = 1,\dots,K$ qui se terminent par des tokens différents. On note $p_{e,t,k}$ la loi de $\varphi(y)$ quand on pose la formulation $k$ à l'endpoint $e$, et $\hat p_{e,t,k}$ sa fréquence empirique.
+\end{definition}
+
+\section{L'estimateur croisé entre formulations}
+
+\begin{definition}
+Pour deux endpoints $e,e'$ et un type $t$, on pose $\delta_k = p_{e,t,k} - p_{e',t,k}$ (vecteur indexé par les symboles) et $\hat\delta_k = \hat p_{e,t,k} - \hat p_{e',t,k}$. L'estimateur est
+\[
+D_t(e,e') = \frac{1}{K(K-1)} \sum_{k \neq l} \langle \hat\delta_k , \hat\delta_l \rangle
+= \frac{\bigl\| \sum_k \hat\delta_k \bigr\|^2 - \sum_k \|\hat\delta_k\|^2}{K(K-1)},
+\qquad d(e,e') = \frac{1}{|T|}\sum_{t\in T} D_t(e,e').
+\]
+\end{definition}
+
+\begin{proposition}\label{prop:nul}
+Si $p_{e,t,k} = p_{e',t,k}$ pour tout $k$ (même loi de réponse), alors $\mathbb{E}[D_t(e,e')] = 0$, quel que soit le nombre de réponses par formulation (même une seule).
+\end{proposition}
+\begin{proof}
+Pour $k \neq l$, $\hat\delta_k$ et $\hat\delta_l$ sont calculés sur des requêtes distinctes, donc indépendants. Chaque fréquence empirique est sans biais : $\mathbb{E}[\hat p_{e,t,k}] = p_{e,t,k}$, d'où $\mathbb{E}[\hat\delta_k] = \delta_k = 0$. Par indépendance, $\mathbb{E}\langle\hat\delta_k,\hat\delta_l\rangle = \langle \mathbb{E}\hat\delta_k, \mathbb{E}\hat\delta_l\rangle = 0$, et on conclut par linéarité.
+\end{proof}
+
+\begin{proposition}
+Sans hypothèse sur $e,e'$, $\mathbb{E}[D_t(e,e')] = \frac{1}{K(K-1)}\sum_{k\neq l}\langle \delta_k,\delta_l\rangle$. En particulier, si l'écart est le même pour toutes les formulations ($\delta_k = \delta$), $\mathbb{E}[D_t] = \|\delta\|^2 > 0$ dès que $\delta \neq 0$.
+\end{proposition}
+\begin{proof}
+Même argument d'indépendance : $\mathbb{E}\langle\hat\delta_k,\hat\delta_l\rangle = \langle\delta_k,\delta_l\rangle$ pour $k\neq l$.
+\end{proof}
+
+\begin{heuristique}
+Une LoRA ou une quantization modifie les poids : on s'attend à des écarts $\delta_k$ de même direction d'une formulation à l'autre, donc à $\mathbb{E}[D_t] > 0$. Un watermark de décodage favorise des tokens choisis à partir du contexte précédent : comme les formulations finissent différemment, les directions des $\delta_k$ varient « au hasard » et $\sum_{k\neq l}\langle\delta_k,\delta_l\rangle \approx 0$. Ce point n'est pas démontré ; on le vérifie sur les endpoints de référence (\texttt{ref-06} est watermarké).
+\end{heuristique}
+
+\begin{remarque}
+$D_t$ peut être négatif (c'est une estimation sans biais d'une quantité qui vaut 0 sous l'hypothèse « même modèle »). C'est normal.
+\end{remarque}
+
+\section{Du score de distance aux groupes}
+
+On regroupe les endpoints par \emph{classification ascendante hiérarchique à liaison moyenne} : on part d'un groupe par endpoint et on fusionne les deux groupes dont la distance moyenne est la plus petite, tant qu'elle est sous un seuil $\tau$. Le seuil $\tau$ est choisi pour maximiser le MCC sur les endpoints de référence, puis réutilisé sur les endpoints notés.
+
+\section{Correspondance avec le code}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Objet mathématique & Fonction dans \texttt{ms\_analyze.py} \\
+\midrule
+$\varphi$ & \texttt{normalize(prompt, response, qtype)} \\
+$\hat p_{e,t,k}$ (comptages) & \texttt{load\_by\_formulation(path)} \\
+$D_t(e,e')$ & \texttt{cross\_formulation(fe, fe2)} \\
+classification, seuil $\tau$ & \texttt{cluster(endpoints, d, t)} \\
+MCC & \texttt{mcc(pred, truth)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+Les propositions sont vérifiées par Monte-Carlo dans \texttt{tests/test\_model\_equality.py} (espérance nulle sous « même modèle », positive pour un écart constant, proche de 0 pour un écart qui change avec la formulation).
+
+\section{Ce qu'on a observé (empirique)}
+
+Version 1 (une seule formulation par question, 667 réponses sur les références) : MCC $= 0{,}23$ seulement. \texttt{ref-06} (watermark) était loin de tous les autres, alors qu'il sert le même modèle que \texttt{ref-01} ; \texttt{ref-02} (fp8) et \texttt{ref-09} (LoRA 0.3) étaient très proches de \texttt{ref-01}. C'est ce qui a motivé la version 2 et l'estimateur croisé.
+
+\section*{Références}
+\begin{itemize}
+  \item I.~Gao, P.~Liang, C.~Guestrin, \emph{Model Equality Testing: Which Model Is This API Serving?}, arXiv:2410.20247 (2024). Test MMD à deux échantillons ; notre estimateur $D_t$ est une variante de leur MMD à noyau \emph{one-hot}. (Référence sûre.)
+  \item G.~Richardeau et al., \emph{FLIPS: Instance-Fingerprinting for LLMs via Pseudo-random Sequences}, alphaXiv 2606.03330 (2026). Empreinte par suites pseudo-aléatoires. (Lu via alphaXiv.)
+\end{itemize}
+
+\end{document}
