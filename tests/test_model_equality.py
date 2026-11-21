@@ -26,3 +26,16 @@ def test_mcc_perfect_and_cluster():
     d = {frozenset(("a", "b")): 0.1, frozenset(("a", "c")): 0.9, frozenset(("b", "c")): 0.8}
     g = cluster(["a", "b", "c"], d, 0.5)
     assert g["a"] == g["b"] != g["c"]
+
+
+def test_l2_unbiased_is_unbiased():
+    """Proposition : E[l2_unbiased] = ||P - Q||^2. Vérifiée numériquement par Monte-Carlo."""
+    import random
+    from ms_analyze import l2_unbiased
+    rng = random.Random(0)
+    P, Q, support = [0.5, 0.3, 0.2], [0.2, 0.3, 0.5], "abc"
+    true_pq = sum((x - y) ** 2 for x, y in zip(P, Q))
+    for target, (A, B) in [(0.0, (P, P)), (true_pq, (P, Q))]:
+        vals = [l2_unbiased(Counter(rng.choices(support, A, k=5)), Counter(rng.choices(support, B, k=5)))
+                for _ in range(20000)]
+        assert abs(sum(vals) / len(vals) - target) < 0.01

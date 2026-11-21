@@ -5,7 +5,8 @@ Notations
     Q                 ensemble des questions (probes)
     P_{e,q}           distribution empirique des réponses normalisées de e à la question q
     TV(P, P')         distance en variation totale = 1/2 * sum_a |P(a) - P'(a)|
-    d(e, e')          = moyenne sur q in Q de TV(P_{e,q}, P_{e',q})          (distance entre endpoints)
+    D(P, P')          = ||P - P'||_2^2, estimé sans biais (MMD^2 à noyau one-hot, Gao et al. 2024)
+    d(e, e')          = moyenne sur q in Q de D(P_{e,q}, P_{e',q})           (distance entre endpoints)
 
 Méthode (heuristique, à valider sur les références) : deux endpoints servent le même modèle si d est petite.
 Regroupement agglomératif à liaison moyenne, coupé au seuil t ; t est choisi pour maximiser le MCC sur les références.
@@ -52,10 +53,24 @@ def tv(p: Counter, q: Counter) -> float:
     return 0.5 * sum(abs(p[a] / np_ - q[a] / nq) for a in set(p) | set(q))
 
 
+def l2_unbiased(p: Counter, q: Counter) -> float:
+    """Estimateur sans biais de ||P - Q||_2^2 = sum_a (P(a) - Q(a))^2 (MMD^2 à noyau one-hot).
+
+    sum_a P(a)^2 est estimé par sum_a c_a (c_a - 1) / (n (n - 1)) (U-statistique), le terme croisé par
+    sum_a c_a c'_a / (n n'). Espérance exacte = ||P - Q||^2, donc ≈ 0 si P = Q quel que soit n (peut être < 0)."""
+    n, m = sum(p.values()), sum(q.values())
+    if n < 2 or m < 2:
+        return 0.0
+    pp = sum(c * (c - 1) for c in p.values()) / (n * (n - 1))
+    qq = sum(c * (c - 1) for c in q.values()) / (m * (m - 1))
+    pq = sum(p[a] * q[a] for a in p) / (n * m)
+    return pp + qq - 2 * pq
+
+
 def distance(dist: dict, e1: str, e2: str) -> float:
-    """d(e1, e2) : moyenne des TV sur les questions communes."""
+    """d(e1, e2) : moyenne sur les questions communes de l'estimateur sans biais de ||P - Q||_2^2."""
     qs = set(dist[e1]) & set(dist[e2])
-    return sum(tv(dist[e1][q], dist[e2][q]) for q in qs) / len(qs)
+    return sum(l2_unbiased(dist[e1][q], dist[e2][q]) for q in qs) / len(qs)
 
 
 def cluster(endpoints: list, d: dict, t: float) -> dict:
@@ -101,7 +116,10 @@ def main() -> None:
     if truth_path:
         with open(truth_path, newline="") as f:
             truth = {r["endpoint"]: r["model"] for r in csv.DictReader(f)}
-        best = max(((mcc(cluster(endpoints, d, t / 100), truth), t / 100) for t in range(1, 100)))
+        cuts = sorted(set(d.values()))
+        thresholds = [(a + b) / 2 for a, b in zip(cuts, cuts[1:])] + [cuts[-1] + 1e-9]
+        best = max((mcc(cluster(endpoints, d, t), truth), -t) for t in thresholds)
+        best = (best[0], -best[1])
         print(f"\nMeilleur seuil t = {best[1]:.2f} -> MCC (même modèle) = {best[0]:.3f}")
         groups = cluster(endpoints, d, best[1])
         for e in endpoints:
