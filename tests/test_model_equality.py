@@ -154,3 +154,26 @@ def test_batch_prompt_and_parse():
     assert "Answer with" not in prompt(bs[0])
     got = parse(bs[0], "1. 1404\n3. 34719\n2) 6,278")
     assert got["mul01"] == "1404" and got["mul04"] == "6278" and got["fam23"] == "<absent>"
+
+
+def test_perm_p_fast_matches_d_pair_and_detects_h1():
+    """ms_perm_exact : d observé = d_pair (même définition) ; p petit sous H1, grand sous H0."""
+    import random
+    from collections import defaultdict
+    import numpy as np
+    from ms_batch_analyze import d_pair
+    from ms_perm_exact import perm_p_fast, holm
+    rnd = random.Random(1)
+
+    def mk(w):
+        U = defaultdict(list)
+        for b in range(4):
+            for _ in range(5):
+                U[b].append({f"q{b}_{i}": rnd.choices("abc", weights=w)[0] for i in range(9)})
+        return U
+    A, B, C = mk([.6, .3, .1]), mk([.6, .3, .1]), mk([.2, .3, .5])
+    rng = np.random.default_rng(0)
+    d, p0 = perm_p_fast(A, B, 3000, rng)
+    assert abs(d - d_pair(A, B)) < 1e-12 and p0 > 0.05
+    assert perm_p_fast(A, C, 3000, rng)[1] < 0.001
+    assert holm({1: 0.001, 2: 0.01, 3: 0.5}, 0.05) == {1, 2}
