@@ -186,9 +186,18 @@ def launch_seeds(seeds: list) -> list:
     return [f"sub_ms_v13_s{s}.pt" for s in seeds]
 
 
+def other_pilot_running() -> bool:
+    """Verrou : un autre processus ms_auto.py tourne déjà (le nôtre exclu)."""
+    r = subprocess.run(["pgrep", "-f", "ms_auto.py"], capture_output=True, text=True)
+    return any(int(p) != os.getpid() for p in r.stdout.split())
+
+
 def main() -> None:
     os.chdir(UL)
     sys.path.insert(0, UL)
+    if other_pilot_running():
+        log("un autre pilote ms_auto.py tourne déjà : arrêt de ce lancement")
+        return
     log("démarrage du pilote automatique")
     while other_loop_running():
         log("une autre boucle de soumission tourne : attente")
