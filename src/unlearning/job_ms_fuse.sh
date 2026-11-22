@@ -11,7 +11,7 @@
 # Méthode fusionnée : cible = substituts sans fuite (gold_v3) lissés localement (γ), distillation T=2 + T=1,
 # rétention sur ext, masque de saillance (SalUn) en option, puis extrapolation α = 1.5.
 # Témoin γ = 0 : sub_ms_v14_g4_t025 (même recette, soumis à part).
-cd /p/scratch/training2666/mandi2/kame_network/unlearning
+cd "${UL:?définir UL, le dossier de travail (modèle, images, ext_retain.npy)}"
 source .venv/bin/activate
 python -u ~/eac/src/unlearning/ms_fuse_targets.py --golds "gold_v3/*.pt" --model model.pt --forget forget_images.npz \
     --block 6 --K 10 --gammas 0.3,0.6 --outdir gold_ms_fuse || exit 1

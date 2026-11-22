@@ -9,7 +9,7 @@
 #SBATCH --time=00:12:00
 #SBATCH --output=output/%j_ms_seeds.out
 # Recette v13_v3 (meilleure) avec 4 graines de plus, pour une soupe de modèles (moyenne des poids) puis α = 1.5.
-cd /p/scratch/training2666/mandi2/kame_network/unlearning
+cd "${UL:?définir UL, le dossier de travail (modèle, images, ext_retain.npy)}"
 source .venv/bin/activate
 COMMON="--tau 1.0 --aug_mode mild --lam_retain 0 --ext ext_retain.npy --lam_ext 1 --lr 2e-4 --epochs 10 --lam_t1 0.25"
 for i in 0 1 2 3; do

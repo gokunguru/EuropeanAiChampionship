@@ -11,7 +11,7 @@
 # v14 : même recette que v13_v3 (meilleur public, 0.073), une seule chose change par GPU.
 #   Hypothèse : le serveur compare à la MOYENNE de plusieurs golds ; moyenner 4 substituts « sans fuite » (gold_v3)
 #   au lieu de 2 rapproche la cible de p_gold. Contrôles : effet de lam_t1, à cible fixée.
-cd /p/scratch/training2666/mandi2/kame_network/unlearning
+cd "${UL:?définir UL, le dossier de travail (modèle, images, ext_retain.npy)}"
 source .venv/bin/activate
 COMMON="--tau 1.0 --aug_mode mild --lam_retain 0 --ext ext_retain.npy --lam_ext 1 --lr 2e-4 --epochs 10"
 CUDA_VISIBLE_DEVICES=0 python -u unlearn.py --gold "gold_v3/*.pt"   --lam_t1 0.25 $COMMON --out sub_ms_v14_g4_t025.pt > output/${SLURM_JOB_ID}_g4_t025.log 2>&1 &

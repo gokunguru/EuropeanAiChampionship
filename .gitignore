@@ -10,3 +10,21 @@ __pycache__/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+
+# données, checkpoints et sorties de jobs (trop gros ou propres au cluster)
+*.pt
+*.npy
+*.npz
+*.parquet
+output/
+submissions_log.csv
+queue.txt
+candidates_ranked.txt
+scores.txt
+
+# fichiers des organisateurs et secrets
+task_template.py
+submission.py
+query_reference.py
+.api_key
+*.key

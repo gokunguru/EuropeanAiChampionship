@@ -9,7 +9,7 @@
 #SBATCH --time=00:20:00
 #SBATCH --output=output/%j_valmap.out
 # Lancer depuis le dossier unlearning : sbatch ~/eac/src/unlearning/job_val_map.sh
-cd /p/scratch/training2666/mandi2/kame_network/unlearning
+cd "${UL:?définir UL, le dossier de travail (modèle, images, ext_retain.npy)}"
 source .venv/bin/activate
 python -u ~/eac/src/unlearning/ms_val_map.py --val ../imagenet_val/data --model model.pt \
     --forget forget_images.npz --out val_map --workers 64

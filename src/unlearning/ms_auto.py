@@ -34,7 +34,7 @@ import time
 
 import torch
 
-UL = os.environ.get("MS_UL", "/p/scratch/training2666/mandi2/kame_network/unlearning")
+UL = os.environ.get("MS_UL", os.getcwd())
 DEADLINE = datetime.time(*map(int, os.environ.get("MS_DEADLINE", "11:30").split(":")))
 POLL = int(os.environ.get("MS_POLL", "60"))
 LOG = "ms_auto.log"

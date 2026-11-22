@@ -10,7 +10,7 @@
 #SBATCH --output=output/%j_ms_fuse2.out
 # Fusion v2 : base = les 2 substituts de v13_v3 (gold_v13a, meilleur public), un fichier lissé par substitut à T=1,
 # voisins de même classe ; γ = 0 redonne exactement v13_v3. GPU3 = v13_v3 avec une autre graine (variance entre runs).
-cd /p/scratch/training2666/mandi2/kame_network/unlearning
+cd "${UL:?définir UL, le dossier de travail (modèle, images, ext_retain.npy)}"
 source .venv/bin/activate
 python -u ~/eac/src/unlearning/ms_fuse_targets.py --golds "gold_v13a/*.pt" --model model.pt --forget forget_images.npz \
     --block 6 --K 10 --gammas 0.3,0.6 --per_file --outdir gold_ms_fuse2 || exit 1
