@@ -58,6 +58,21 @@ def local_teacher(h: torch.Tensor, q: torch.Tensor, K: int, tau: float) -> torch
     return (w.unsqueeze(-1) * q[idx]).sum(1)
 
 
+def local_teacher_cc(h: torch.Tensor, p: torch.Tensor, y: torch.Tensor, K: int, tau: float) -> torch.Tensor:
+    """Professeur local CONDITIONNÉ À LA CLASSE : voisins parmi les images de même pseudo-étiquette y (i exclu).
+    p_loc(x_i) = Σ_{j ∈ N_K(i), y_j = y_i} w_ij p(x_j) ; sans voisin de même classe, p_loc(x_i) = p(x_i)."""
+    S = h @ h.T
+    S.fill_diagonal_(-2.0)
+    S = S.masked_fill(y[:, None] != y[None, :], -2.0)
+    val, idx = S.topk(K, dim=1)
+    valid = val > -1.5
+    w = F.softmax((val / tau).masked_fill(~valid, -1e9), dim=1) * valid
+    out = (w.unsqueeze(-1) * p[idx]).sum(1)
+    none = ~valid.any(1)
+    out[none] = p[none]
+    return out / out.sum(1, keepdim=True)
+
+
 def fuse(q_sur: torch.Tensor, q_loc: torch.Tensor, gamma: float) -> torch.Tensor:
     return (1 - gamma) * q_sur + gamma * q_loc
 
@@ -76,6 +91,8 @@ def main() -> None:
     ap.add_argument("--K", type=int, default=10); ap.add_argument("--tau_knn", type=float, default=0.05)
     ap.add_argument("--gammas", default="0,0.3,0.6"); ap.add_argument("--outdir", default="gold_ms_fuse")
     ap.add_argument("--arch", default="vit_base_patch16_224")
+    ap.add_argument("--per_file", action="store_true",
+                    help="un fichier lissé par substitut, à T=1 et voisins de même classe (γ=0 redonne les fichiers d'origine)")
     a = ap.parse_args()
     os.makedirs(a.outdir, exist_ok=True)
     files = sorted(glob.glob(a.golds))
@@ -89,6 +106,19 @@ def main() -> None:
     with torch.no_grad():
         y = torch.cat([m(torch.from_numpy(np.ascontiguousarray(X[i:i + 256])).to(DEV).permute(0, 3, 1, 2).float()
                          .div(255).sub(0.5).div(0.5)).argmax(1).cpu() for i in range(0, len(X), 256)])
+    if a.per_file:
+        for g in [float(x) for x in a.gammas.split(",")]:
+            d = f"{a.outdir}/g{g}"
+            os.makedirs(d, exist_ok=True)
+            for f in files:
+                p = F.softmax(torch.load(f, map_location="cpu")["logits"].float(), 1)
+                pf = (1 - g) * p + g * local_teacher_cc(h, p, y, a.K, a.tau_knn)
+                keep = (pf.argmax(1) == p.argmax(1)).float().mean().item()
+                ce = F.cross_entropy(pf.clamp_min(1e-12).log(), y, reduction="none")
+                torch.save({"logits": pf.clamp_min(1e-12).log(), "logits_noflip": pf.clamp_min(1e-12).log(), "gamma": g,
+                            "K": a.K, "block": a.block, "source": f}, f"{d}/{os.path.basename(f)}")
+                print(f"  γ = {g:.2f}  {os.path.basename(f)} : CE(T=1) = {ce.mean():.3f} ± {ce.std():.3f}, argmax conservé {keep:.3f}")
+        return
     ql = local_teacher(h, qs, a.K, a.tau_knn)
     agree = (ql.argmax(1) == qs.argmax(1)).float().mean().item()
     print(f"feature bloc {a.block}, K = {a.K} : le professeur local garde l'argmax des substituts sur {agree:.3f} des images")

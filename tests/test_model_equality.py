@@ -202,3 +202,20 @@ def test_fuse_targets_properties():
     assert torch.allclose(M.local_teacher(h2, qs, 1, 0.05)[0], qs[1])
     q = M.fuse(qs, ql, 0.3)
     assert torch.allclose(F.softmax(2 * q.log() / 2, 1), q, atol=1e-6)
+
+
+def test_local_teacher_class_conditioned():
+    """local_teacher_cc : renvoie une loi ; sans voisin de même classe -> p inchangée ; p constante par classe -> p."""
+    import pytest
+    torch = pytest.importorskip("torch"); pytest.importorskip("timm")
+    import torch.nn.functional as F
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "unlearning"))
+    import ms_fuse_targets as M
+    g = torch.Generator().manual_seed(1)
+    p = F.softmax(torch.randn(40, 100, generator=g) * 3, 1)
+    h = F.normalize(torch.randn(40, 8, generator=g), dim=1)
+    y = torch.randint(0, 5, (40,), generator=g); y[0] = 99
+    pl = M.local_teacher_cc(h, p, y, 4, 0.05)
+    assert torch.allclose(pl.sum(1), torch.ones(40), atol=1e-5) and torch.allclose(pl[0], p[0])
+    pc = F.softmax(torch.randn(100, 100, generator=g), 1)[y.clamp(max=4)]; pc[0] = p[0]
+    assert torch.allclose(M.local_teacher_cc(h, pc, y, 4, 0.05), pc, atol=1e-5)
