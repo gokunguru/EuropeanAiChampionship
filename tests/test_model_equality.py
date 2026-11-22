@@ -177,3 +177,28 @@ def test_perm_p_fast_matches_d_pair_and_detects_h1():
     assert abs(d - d_pair(A, B)) < 1e-12 and p0 > 0.05
     assert perm_p_fast(A, C, 3000, rng)[1] < 0.001
     assert holm({1: 0.001, 2: 0.01, 3: 0.5}, 0.05) == {1, 2}
+
+
+def test_fuse_targets_properties():
+    """ms_fuse_targets : q_sur = moyenne des softmax(z/2) ; q_loc et q sont des lois ; γ=0 -> q_sur ;
+    i exclu de ses voisins ; logits = 2 log q redonne q à T=2."""
+    import pytest
+    torch = pytest.importorskip("torch"); pytest.importorskip("timm")
+    import torch.nn.functional as F
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "unlearning"))
+    import ms_fuse_targets as M
+    import tempfile, os
+    g = torch.Generator().manual_seed(0)
+    z1, z2 = torch.randn(30, 100, generator=g) * 3, torch.randn(30, 100, generator=g) * 3
+    d = tempfile.mkdtemp()
+    torch.save({"logits": z1}, os.path.join(d, "a.pt")); torch.save({"logits": z2}, os.path.join(d, "b.pt"))
+    qs = M.q_surrogates([os.path.join(d, "a.pt"), os.path.join(d, "b.pt")])
+    assert torch.allclose(qs, (F.softmax(z1 / 2, 1) + F.softmax(z2 / 2, 1)) / 2)
+    h = F.normalize(torch.randn(30, 8, generator=g), dim=1)
+    ql = M.local_teacher(h, qs, 4, 0.05)
+    assert torch.allclose(ql.sum(1), torch.ones(30), atol=1e-5)
+    assert torch.equal(M.fuse(qs, ql, 0.0), qs)
+    h2 = h.clone(); h2[1] = h2[0]
+    assert torch.allclose(M.local_teacher(h2, qs, 1, 0.05)[0], qs[1])
+    q = M.fuse(qs, ql, 0.3)
+    assert torch.allclose(F.softmax(2 * q.log() / 2, 1), q, atol=1e-6)
