@@ -64,7 +64,7 @@ def known_score(path: str):
     if os.path.exists("submissions_log.csv"):
         for line in open("submissions_log.csv", encoding="utf-8", errors="replace"):
             parts = line.split(",", 2)
-            m = re.search(r"Score \(public split\): ([0-9.]+)", line)
+            m = re.search(r"Score \(public split\): (-?[0-9.]+)", line)
             if len(parts) > 1 and parts[1] == path and m:
                 s = float(m.group(1))
     return s
@@ -89,7 +89,7 @@ def submit(path: str):
         out = buf.getvalue().replace("\n", " ").replace('"', "'")
         with open("submissions_log.csv", "a", encoding="utf-8") as f:
             f.write(f'{datetime.datetime.now():%H:%M:%S},{path},,ms_auto,ok,,"{out}"\n')
-        m = re.search(r"Score \(public split\): ([0-9.]+)", out)
+        m = re.search(r"Score \(public split\): (-?[0-9.]+)", out)
         if m:
             log(f"SCORE {path} = {m.group(1)}")
             return float(m.group(1))
