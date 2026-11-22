@@ -42,29 +42,40 @@ def to224(b: bytes) -> np.ndarray:
     return np.asarray(im.crop((l, t, l + 224, t + 224)), dtype=np.uint8)
 
 
-def load_val(folder: str, workers: int):
-    imgs, labels = [], []
+def load_val(folder: str, workers: int, per_class: int = 50, classes=None):
+    """Décode au plus per_class images par classe ImageNet (et seulement les classes données, si classes)."""
+    imgs, labels, seen = [], [], {}
     with ProcessPoolExecutor(workers) as ex:
         for f in sorted(glob.glob(os.path.join(folder, "*.parquet"))):
-            t = pq.read_table(f, columns=["image", "label"]).to_pydict()
-            imgs += list(ex.map(to224, [d["bytes"] for d in t["image"]], chunksize=64))
-            labels += t["label"]
+            lab = pq.read_table(f, columns=["label"]).column("label").to_pylist()
+            keep = []
+            for i, c in enumerate(lab):
+                if (classes is None or c in classes) and seen.get(c, 0) < per_class:
+                    seen[c] = seen.get(c, 0) + 1; keep.append(i)
+            if not keep:
+                continue
+            t = pq.read_table(f, columns=["image"]).take(keep).to_pydict()
+            imgs += list(ex.map(to224, [d["bytes"] for d in t["image"]], chunksize=16))
+            labels += [lab[i] for i in keep]
             print(f"  {os.path.basename(f)} : {len(labels)} images", flush=True)
     return np.stack(imgs), np.array(labels)
+
+
+DEV = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def model_from(path: str):
     m = timm.create_model("vit_base_patch16_224", pretrained=False, num_classes=100, init_values=1e-4)
     m.load_state_dict(torch.load(path, map_location="cpu"), strict=True)
-    return m.cuda().eval()
+    return m.to(DEV).eval()
 
 
 @torch.no_grad()
 def logits_of(m, X: np.ndarray, bs: int = 500) -> np.ndarray:
     out = []
     for i in range(0, len(X), bs):
-        x = torch.from_numpy(X[i:i + bs]).cuda().permute(0, 3, 1, 2).float().div(255).sub(0.5).div(0.5)
-        with torch.autocast("cuda", dtype=torch.float16):
+        x = torch.from_numpy(np.ascontiguousarray(X[i:i + bs])).to(DEV).permute(0, 3, 1, 2).float().div(255).sub(0.5).div(0.5)
+        with torch.autocast(DEV, dtype=torch.float16 if DEV == "cuda" else torch.bfloat16):
             out.append(m(x).float().cpu())
     return torch.cat(out).numpy()
 
@@ -74,7 +85,7 @@ def small(X: np.ndarray, bs: int = 1000) -> torch.Tensor:
     """Empreinte 32x32 niveaux de gris centrée-normée (robuste au recadrage léger)."""
     out = []
     for i in range(0, len(X), bs):
-        x = torch.from_numpy(X[i:i + bs]).cuda().float().mean(-1, keepdim=True).permute(0, 3, 1, 2)
+        x = torch.from_numpy(np.ascontiguousarray(X[i:i + bs])).to(DEV).float().mean(-1, keepdim=True).permute(0, 3, 1, 2)
         x = F.adaptive_avg_pool2d(x, 32).flatten(1)
         out.append(F.normalize(x - x.mean(1, keepdim=True), dim=1))
     return torch.cat(out)
@@ -85,20 +96,21 @@ def main() -> None:
     ap.add_argument("--val", required=True); ap.add_argument("--model", default="model.pt")
     ap.add_argument("--forget", default="forget_images.npz"); ap.add_argument("--out", default="val_map")
     ap.add_argument("--workers", type=int, default=32); ap.add_argument("--min_purity", type=float, default=0.5)
+    ap.add_argument("--per_class", type=int, default=50, help="images par classe pour l'association (CPU : 5)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
-    print("1) décodage du val", flush=True)
-    V, y = load_val(a.val, a.workers)
+    print(f"1) décodage du val ({a.per_class} images par classe), appareil : {DEV}", flush=True)
+    V, y = load_val(a.val, a.workers, a.per_class)
     m = model_from(a.model)
     print("2) logits du modèle original sur le val", flush=True)
-    L = logits_of(m, V)
+    L = logits_of(m, V, bs=500 if DEV == "cuda" else 64)
     np.save(f"{a.out}/val_logits.npy", L); np.save(f"{a.out}/val_labels.npy", y)
     pred = L.argmax(1)
 
     N = np.zeros((1000, 100), dtype=int)
     np.add.at(N, (y, pred), 1)
-    pi = N.argmax(0); pur = N.max(0) / 50.0
+    pi = N.argmax(0); pur = N.max(0) / float(a.per_class)
     ok = [k for k in range(100) if pur[k] >= a.min_purity]
     inj = len({pi[k] for k in ok}) == len(ok)
     json.dump({int(k): {"imagenet": int(pi[k]), "purete": float(pur[k])} for k in range(100)},
@@ -107,9 +119,14 @@ def main() -> None:
     print("   quantiles de pureté (0, 25, 50, 75, 100 %) :", np.round(np.quantile(pur, [0, .25, .5, .75, 1]), 2))
 
     inv = {int(pi[k]): k for k in ok}
+    if a.per_class < 50:                     # 2e passe : les 50 images de chaque classe associée
+        print("   2e passe : toutes les images des classes associées", flush=True)
+        V, y = load_val(a.val, a.workers, 50, set(inv))
+        L = logits_of(m, V, bs=500 if DEV == "cuda" else 64)
     sel = np.array([i for i in range(len(y)) if int(y[i]) in inv])
     tgt = np.array([inv[int(y[i])] for i in sel])
     np.save(f"{a.out}/sel_images.npy", V[sel]); np.save(f"{a.out}/sel_targets.npy", tgt)
+    np.save(f"{a.out}/sel_logits.npy", L[sel])
     Ls = torch.from_numpy(L[sel])
     ce = F.cross_entropy(Ls, torch.from_numpy(tgt), reduction="none").numpy()
     acc = float((L[sel].argmax(1) == tgt).mean())
@@ -118,7 +135,8 @@ def main() -> None:
           "   <- estimation de (gold_mean, gold_std) si l'hypothèse tient")
 
     Fo = np.load(a.forget)["images"]
-    Lf = logits_of(m, Fo)
+    Lf = logits_of(m, Fo, bs=500 if DEV == "cuda" else 64)
+    np.save(f"{a.out}/forget_logits_orig.npy", Lf)
     pf = torch.from_numpy(Lf)
     cef = F.cross_entropy(pf, pf.argmax(1), reduction="none").numpy()
     print(f"   perte CE du modèle original sur l'oubli (étiquette = sa propre prédiction) : moyenne {cef.mean():.3f},"
